@@ -4,10 +4,10 @@
 
 USE marr_db;
 
--- 2 employees
+-- 2 employees (return_home_rate must be 0, 1000 or 2000 — see lib/returnHome.ts)
 INSERT INTO employees (emp_code, name, base_allowance, base_ot_rate, return_home_rate) VALUES
-  ('EMP001', 'John Doe', 50.00, 15.00, 500.00),
-  ('EMP002', 'Jane Smith', 55.00, 18.00, 600.00);
+  ('EMP001', 'John Doe', 50.00, 15.00, 1000.00),
+  ('EMP002', 'Jane Smith', 55.00, 18.00, 2000.00);
 
 -- 3 location rates
 INSERT INTO location_rates (location_name, travel_fee) VALUES

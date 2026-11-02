@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { isReturnHomeOption, RETURN_HOME_OPTIONS, returnHomeLabel } from "@/lib/returnHome";
 import type { Employee, EmployeeRatesUpdate, NewEmployee } from "@/lib/types";
 
 const RATE_FIELDS: (keyof EmployeeRatesUpdate)[] = ["base_allowance", "base_ot_rate", "return_home_rate"];
@@ -105,6 +106,10 @@ export default function EmployeesPage() {
       setError("Rates must be numbers of 0 or more.");
       return;
     }
+    if (!isReturnHomeOption(rates.return_home_rate)) {
+      setError(`${employee.emp_code}: please choose a Return Home option.`);
+      return;
+    }
 
     setUpdatingId(employee.id);
     setError(null);
@@ -197,14 +202,18 @@ export default function EmployeesPage() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Return Home Rate</label>
-            <input
-              type="number"
-              step="0.01"
+            <label className="text-xs font-medium text-gray-600">Return Home</label>
+            <select
               value={form.return_home_rate}
               onChange={(e) => setForm({ ...form, return_home_rate: Number(e.target.value) })}
               className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-            />
+            >
+              {RETURN_HOME_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="sm:col-span-2 lg:col-span-5 flex items-center gap-3">
             <button
@@ -260,7 +269,27 @@ export default function EmployeesPage() {
                   <tr key={employee.id}>
                     <td className="px-4 py-3 font-medium text-gray-900">{employee.emp_code}</td>
                     <td className="px-4 py-3 text-gray-700">{employee.name}</td>
-                    {RATE_FIELDS.map((field) => (
+                    {RATE_FIELDS.map((field) =>
+                      field === "return_home_rate" ? (
+                        <td key={field} className="px-4 py-2 text-right">
+                          <select
+                            value={editedRates(employee).return_home_rate}
+                            onChange={(e) => setRate(employee, field, Number(e.target.value))}
+                            className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                          >
+                            {!isReturnHomeOption(editedRates(employee).return_home_rate) && (
+                              <option value={editedRates(employee).return_home_rate} disabled>
+                                {returnHomeLabel(editedRates(employee).return_home_rate)}
+                              </option>
+                            )}
+                            {RETURN_HOME_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      ) : (
                       <td key={field} className="px-4 py-2 text-right">
                         <input
                           type="number"
@@ -271,7 +300,8 @@ export default function EmployeesPage() {
                           className="w-28 rounded-md border border-gray-300 px-2 py-1 text-right text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-400"
                         />
                       </td>
-                    ))}
+                      )
+                    )}
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       {updatedId === employee.id && <span className="mr-3 text-sm text-green-700">Saved</span>}
                       <button

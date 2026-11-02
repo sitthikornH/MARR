@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { execute, query, type RowDataPacket } from "@/lib/db";
+import { isReturnHomeOption, RETURN_HOME_ERROR } from "@/lib/returnHome";
 import type { ApiError, Employee, EmployeeRatesUpdate } from "@/lib/types";
 
 interface RouteParams {
@@ -60,6 +61,9 @@ export async function PUT(
         { error: "base_allowance, base_ot_rate, and return_home_rate must be numbers >= 0" },
         { status: 400 }
       );
+    }
+    if (!isReturnHomeOption(body.return_home_rate)) {
+      return NextResponse.json({ error: RETURN_HOME_ERROR }, { status: 400 });
     }
     const [baseAllowance, baseOtRate, returnHomeRate] = rates as number[];
 

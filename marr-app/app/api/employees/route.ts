@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execute, query, type RowDataPacket } from "@/lib/db";
+import { isReturnHomeOption, RETURN_HOME_ERROR } from "@/lib/returnHome";
 import type { ApiError, Employee, NewEmployee } from "@/lib/types";
 
 export async function GET(): Promise<NextResponse<Employee[] | ApiError>> {
@@ -30,6 +31,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<Employee 
         { error: "emp_code, name, base_allowance, base_ot_rate, and return_home_rate are required" },
         { status: 400 }
       );
+    }
+
+    if (!isReturnHomeOption(return_home_rate)) {
+      return NextResponse.json({ error: RETURN_HOME_ERROR }, { status: 400 });
     }
 
     const result = await execute(

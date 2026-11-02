@@ -103,6 +103,10 @@ If you change any of these formulas, change them only in this one route handler 
 
 `mysql2`'s `execute()` overloads require values to match its `ExecuteValues` type, which (unlike `QueryValues`) does **not** include `undefined`. Fields narrowed only by `Number.isInteger(x)` or similar non-primitive guards stay `T | undefined` to the type checker and silently fail overload resolution with a confusing "Argument of type 'string' is not assignable to parameter of type 'QueryOptions'" error (TS reports the *other* overload's mismatch). Fix: assign to a definitively-typed local (`const x: number = value as number`) after validating, and pass that local to `execute`/`query` — see `welfareId`/`monthNum`/`yearNum` in the welfare route for the pattern. `lib/db.ts`'s `query`/`execute` helpers also cast params `as any[]` for the same reason.
 
+### Return Home options
+
+`employees.return_home_rate` is limited to three values defined in `lib/returnHome.ts` and shown as a dropdown on the Employees page: 0 = "ไม่มีค่ากลับบ้าน", 1,000 = "D < 350 กม", 2,000 = "D > 350 กม" (THB per month, by home distance). `POST /api/employees` and `PUT /api/employees/[id]` reject any other value; a legacy non-standard value is shown as a disabled option until an allowed one is chosen. The welfare calculation still uses the stored number as-is (rule 4).
+
 ### Conventions
 
 - All SQL is parameterized (`?` placeholders) — no string-interpolated SQL anywhere.
