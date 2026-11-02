@@ -3,8 +3,8 @@ import type { RowDataPacket } from "mysql2/promise";
 import pool from "@/lib/db";
 import type { ApiError, WelfareCalculateRequest, WelfareCalculateResult } from "@/lib/types";
 
-const STANDARD_CHECKOUT_HOUR = 17; // 17:00 is the standard check-out time
 const STANDARD_HOURS_PER_DAY = 8;
+const OT_ROUND_UP_MINUTES = 20; // per-day OT remainder: < 20 min dropped, >= 20 min rounds up to the next hour
 const RETURN_HOME_THRESHOLD = 0.8; // 80% of standard monthly working hours
 
 interface EmployeeRow extends RowDataPacket {
@@ -23,9 +23,73 @@ interface AttendanceWithFeeRow extends RowDataPacket {
   travel_fee: number | null;
 }
 
+interface CheckLogRow extends RowDataPacket {
+  date: string;
+  time_in: string | null;
+  time_out: string | null;
+}
+
+interface OvertimeRow extends RowDataPacket {
+  date: string;
+  time_start: string;
+  time_end: string;
+}
+
+type Interval = [number, number]; // minutes from midnight, start < end
+
 function timeStringToHours(time: string): number {
   const [h, m, s] = time.split(":").map(Number);
   return h + m / 60 + (s ?? 0) / 3600;
+}
+
+const toMinutes = (time: string) => timeStringToHours(time) * 60;
+
+function mergeIntervals(intervals: Interval[]): Interval[] {
+  const sorted = intervals.filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
+  const merged: Interval[] = [];
+  for (const [s, e] of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+    else merged.push([s, e]);
+  }
+  return merged;
+}
+
+/**
+ * A day's worked intervals from its check-log rows. A row with both times is one interval; rows
+ * holding only a check-in or only a check-out (TimeMint records them separately) are paired in
+ * time order, each check-in with the next check-out. Unpaired times are ignored.
+ */
+function workedIntervals(rows: CheckLogRow[]): Interval[] {
+  const intervals: Interval[] = [];
+  const events: { t: number; kind: "in" | "out" }[] = [];
+  for (const r of rows) {
+    if (r.time_in && r.time_out) intervals.push([toMinutes(r.time_in), toMinutes(r.time_out)]);
+    else if (r.time_in) events.push({ t: toMinutes(r.time_in), kind: "in" });
+    else if (r.time_out) events.push({ t: toMinutes(r.time_out), kind: "out" });
+  }
+  events.sort((a, b) => a.t - b.t);
+  let openIn: number | null = null;
+  for (const ev of events) {
+    if (ev.kind === "in") openIn ??= ev.t;
+    else if (openIn !== null) {
+      intervals.push([openIn, ev.t]);
+      openIn = null;
+    }
+  }
+  return mergeIntervals(intervals);
+}
+
+function overlapMinutes(a: Interval[], b: Interval[]): number {
+  let total = 0;
+  for (const [as, ae] of a) for (const [bs, be] of b) total += Math.max(0, Math.min(ae, be) - Math.max(as, bs));
+  return total;
+}
+
+/** Whole OT hours for one day: remainder < 20 min is dropped, >= 20 min rounds up. */
+function roundOtHours(minutes: number): number {
+  const whole = Math.floor(minutes / 60);
+  return minutes - whole * 60 >= OT_ROUND_UP_MINUTES ? whole + 1 : whole;
 }
 
 /** Standard monthly working hours = 8 hours * number of weekdays (Mon-Fri) in the month. */
@@ -105,19 +169,38 @@ export async function POST(
       0
     );
 
-    // Rule 3: Overtime - hours worked past the standard 17:00 check-out time.
+    // Rule 3: Overtime - only on days with an approved TimeMint OT request. OT minutes are the
+    // check-in/out time that overlaps the request window(s); each day is rounded to whole hours.
+    const [checkLogRows] = await connection.execute<CheckLogRow[]>(
+      `SELECT date, time_in, time_out FROM attendance_report
+       WHERE employee_id = ? AND row_type = 'checklog' AND YEAR(date) = ? AND MONTH(date) = ?`,
+      [employeeId, yearNum, monthNum]
+    );
+    const [overtimeRows] = await connection.execute<OvertimeRow[]>(
+      `SELECT date, time_start, time_end FROM overtime_request
+       WHERE employee_id = ? AND status = 'Approved' AND YEAR(date) = ? AND MONTH(date) = ?`,
+      [employeeId, yearNum, monthNum]
+    );
+    const otWindowsByDate = new Map<string, Interval[]>();
+    for (const ot of overtimeRows) {
+      const start = toMinutes(ot.time_start);
+      let end = toMinutes(ot.time_end);
+      if (end <= start) end = 24 * 60; // request past midnight: count up to the end of the day
+      otWindowsByDate.set(ot.date, [...(otWindowsByDate.get(ot.date) ?? []), [start, end]]);
+    }
     let totalOtHours = 0;
+    for (const [date, windows] of otWindowsByDate) {
+      const worked = workedIntervals(checkLogRows.filter((r) => r.date === date));
+      totalOtHours += roundOtHours(overlapMinutes(worked, mergeIntervals(windows)));
+    }
+    const totalOt = totalOtHours * Number(employee.base_ot_rate);
+
     let totalWorkedHours = 0;
     for (const row of validDays) {
       const inHours = timeStringToHours(row.time_in as string);
       const outHours = timeStringToHours(row.time_out as string);
-      const workedHours = Math.max(0, outHours - inHours);
-      totalWorkedHours += workedHours;
-      if (outHours > STANDARD_CHECKOUT_HOUR) {
-        totalOtHours += outHours - STANDARD_CHECKOUT_HOUR;
-      }
+      totalWorkedHours += Math.max(0, outHours - inHours);
     }
-    const totalOt = totalOtHours * Number(employee.base_ot_rate);
 
     // Rule 4: Return home bonus - awarded if total worked hours >= 80% of standard monthly hours.
     const standardHours = standardMonthlyHours(yearNum, monthNum);
@@ -148,6 +231,7 @@ export async function POST(
       total_travel: totalTravel,
       total_ot: totalOt,
       total_return_home: totalReturnHome,
+      ot_hours: totalOtHours,
     };
 
     return NextResponse.json(result, { status: 200 });

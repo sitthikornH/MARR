@@ -65,6 +65,7 @@ export interface WelfareCalculateResult {
   total_travel: number;
   total_ot: number;
   total_return_home: number;
+  ot_hours: number; // rounded OT hours behind total_ot
 }
 
 export type SyncStatus = "success" | "error";

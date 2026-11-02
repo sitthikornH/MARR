@@ -78,7 +78,7 @@ export default function WelfareSummaryPage() {
     ? [
         { label: "Allowance", value: result.total_allowance },
         { label: "Travel", value: result.total_travel },
-        { label: "Overtime", value: result.total_ot },
+        { label: "Overtime", value: result.total_ot, detail: `${result.ot_hours} h (approved OT requests)` },
         { label: "Return Home", value: result.total_return_home },
       ]
     : [];
@@ -167,6 +167,7 @@ export default function WelfareSummaryPage() {
                 <p className="mt-2 text-xl font-semibold text-gray-900">
                   {card.value.toFixed(2)}
                 </p>
+                {"detail" in card && card.detail && <p className="mt-1 text-xs text-gray-500">{card.detail}</p>}
               </div>
             ))}
           </div>

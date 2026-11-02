@@ -80,7 +80,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<TimeMintI
     const checkLogs = await fetchCheckLogs(empCode, dateStart, dateEnd);
     const leaves = await fetchApprovedLeaves(empCode, dateStart, dateEnd);
     const profile = await optional("Employee profile", null, warnings, () => fetchEmployeeProfile(empCode));
+    const warningsBeforeOvertime = warnings.length;
     const overtimes = await optional("Overtime requests", [], warnings, () => fetchOvertimes(empCode, dateStart, dateEnd));
+    const overtimesFetched = warnings.length === warningsBeforeOvertime;
     const shifts = await optional("Shifts", [], warnings, () => fetchShifts(empCode, dateStart, dateEnd));
     const weeklyHolidays = await optional("Weekly holidays", [], warnings, () =>
       fetchWeeklyHolidays(empCode, dateStart, dateEnd)
@@ -161,6 +163,40 @@ export async function POST(request: NextRequest): Promise<NextResponse<TimeMintI
               row.approver_code,
             ]
           );
+        }
+
+        // OT requests feed the welfare OT formula. Only replace them when the fetch succeeded,
+        // so a missing API topic doesn't wipe previously imported requests.
+        if (overtimesFetched) {
+          await connection.execute("DELETE FROM overtime_request WHERE employee_id = ? AND date BETWEEN ? AND ?", [
+            employeeId,
+            dateStart,
+            dateEnd,
+          ]);
+          for (const ot of overtimes) {
+            if (ot.OvertimeDate < dateStart || ot.OvertimeDate > dateEnd) continue;
+            await connection.execute(
+              `INSERT INTO overtime_request
+                 (employee_id, overtime_id, date, time_start, time_end, minutes, overtime_type, day_type, reason, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE
+                 employee_id = VALUES(employee_id), date = VALUES(date), time_start = VALUES(time_start),
+                 time_end = VALUES(time_end), minutes = VALUES(minutes), overtime_type = VALUES(overtime_type),
+                 day_type = VALUES(day_type), reason = VALUES(reason), status = VALUES(status)`,
+              [
+                employeeId,
+                ot.OvertimeID,
+                ot.OvertimeDate,
+                ot.OvertimeTimeStart,
+                ot.OvertimeTimeEnd,
+                Number(ot.OvertimeMinutes) || 0,
+                ot.OvertimeType || null,
+                ot.OvertimeDayType || null,
+                ot.OvertimeReason ? ot.OvertimeReason.slice(0, 500) : null,
+                (ot.OvertimeRecordStatus || "").slice(0, 20),
+              ]
+            );
+          }
         }
 
         const [deleted] = await connection.execute<ResultSetHeader>(

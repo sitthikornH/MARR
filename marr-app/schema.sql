@@ -77,6 +77,27 @@ CREATE TABLE IF NOT EXISTS attendance_report (
   INDEX idx_attendance_report_employee_date (employee_id, date)
 );
 
+-- TimeMint overtime requests (approved and pending), saved by the attendance import.
+-- The welfare OT formula uses approved requests overlapped by check-in/out intervals.
+CREATE TABLE IF NOT EXISTS overtime_request (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  employee_id INT NOT NULL,
+  overtime_id VARCHAR(50) NOT NULL,
+  date DATE NOT NULL,
+  time_start TIME NOT NULL,
+  time_end TIME NOT NULL,
+  minutes INT NOT NULL DEFAULT 0,
+  overtime_type VARCHAR(50) NULL,
+  day_type VARCHAR(50) NULL,
+  reason VARCHAR(500) NULL,
+  status VARCHAR(20) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_overtime_request_employee FOREIGN KEY (employee_id)
+    REFERENCES employees(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_overtime_request_id (overtime_id),
+  INDEX idx_overtime_request_employee_date (employee_id, date)
+);
+
 -- Upgrade for databases whose attendance_report predates the columns above
 -- (run once; MySQL errors if a column already exists, which is safe to ignore):
 -- ALTER TABLE attendance_report
