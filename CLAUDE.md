@@ -19,7 +19,7 @@ Run all commands from `marr-app/`:
 
 No test runner is configured yet.
 
-Git is not installed on this machine, so released versions are saved as zip snapshots in `D:\MARR\versions\` (e.g. `MARR V.1.zip`, 2026-11-02). Snapshots exclude `node_modules`, `.next` and `.env.local` (secrets); restore by copying `.env.local` back and running `npm install` in `marr-app/`.
+`D:\MARR` is a Git repository (branch `main`, committer Sitthikorn.hong@gmail.com, installed 2026-11-02 at `C:\Program Files\Git\cmd\git.exe`). Released versions are annotated tags named `MARR-V.<n>` (tag names cannot contain spaces); `MARR-V.1` is the first. The root `.gitignore` keeps `.env*`, `node_modules/`, `.next/` and `versions/` out of Git. `versions/` also holds a zip snapshot of V.1 (`MARR V.1.zip`) made before Git was installed.
 
 ### Database setup
 
