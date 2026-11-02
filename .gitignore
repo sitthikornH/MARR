@@ -1,0 +1,15 @@
+# dependencies and build output
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# secrets (DB password, TimeMint API key)
+.env*
+
+# zip snapshots of released versions
+versions/
+
+# OS / editor
+.DS_Store
+Thumbs.db
