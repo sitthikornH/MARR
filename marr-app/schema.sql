@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS mileage_claim (
   month INT NOT NULL,
   year INT NOT NULL,
   rate_per_km DECIMAL(10,2) NOT NULL DEFAULT 5.00,
+  telephone_amount DECIMAL(10,2) NULL, -- Telephone line; the latest saved value pre-fills later months
   remarks TEXT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_mileage_claim_employee FOREIGN KEY (employee_id)
@@ -146,6 +147,7 @@ CREATE TABLE IF NOT EXISTS mileage_other_item (
 --   ADD COLUMN holiday_name VARCHAR(255) NULL AFTER day_type,
 --   ADD COLUMN department VARCHAR(255) NULL AFTER holiday_name,
 --   ADD COLUMN approver_code VARCHAR(255) NULL AFTER department;
+-- ALTER TABLE mileage_claim ADD COLUMN telephone_amount DECIMAL(10,2) NULL AFTER rate_per_km;
 
 -- Single-row system settings (id is always 1)
 CREATE TABLE IF NOT EXISTS app_settings (

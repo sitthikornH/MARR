@@ -111,6 +111,49 @@ export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDa
   return { ...empty, kind: "none" };
 }
 
+const RETURN_HOME_HALF_RATIO = 0.5; // work days >= 50% of base days -> half of return_home_rate
+const RETURN_HOME_FULL_RATIO = 0.8; // work days >= 80% of base days -> full return_home_rate
+
+const isSunday = (date: string) => new Date(`${date}T00:00:00`).getDay() === 0;
+
+function sundayCount(year: number, month: number): number {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let sundays = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    if (new Date(year, month - 1, day).getDay() === 0) sundays++;
+  }
+  return sundays;
+}
+
+export interface ReturnHomeBonus {
+  amount: number;
+  work_days: number;
+  base_days: number;
+  half_threshold_days: number;
+  full_threshold_days: number;
+}
+
+/**
+ * Welfare rule 4, tiered by work days / base days:
+ *   base days = days in month - Sundays - TimeMint company holidays (leave days are not deducted)
+ *   work days < floor(50% of base)         -> 0
+ *   floor(50%) <= work days < floor(80%)   -> half of return_home_rate
+ *   work days >= floor(80% of base)        -> full return_home_rate
+ * Fractions of a day in the thresholds are dropped. Used by the welfare calculation and the
+ * mileage form's "ค่ากลับบ้าน" line.
+ */
+export function returnHomeBonus(year: number, month: number, rows: DayRuleRow[], returnHomeRate: number): ReturnHomeBonus {
+  const days = classifyMonth(year, month, rows);
+  const workDays = days.filter((d) => d.work_day).length;
+  // A company holiday on a Sunday is already deducted with the Sundays.
+  const companyHolidays = new Set(rows.filter((r) => r.day_type === "company_holiday" && !isSunday(r.date)).map((r) => r.date));
+  const baseDays = days.length - sundayCount(year, month) - companyHolidays.size;
+  const half = Math.floor(baseDays * RETURN_HOME_HALF_RATIO + 1e-9);
+  const full = Math.floor(baseDays * RETURN_HOME_FULL_RATIO + 1e-9);
+  const amount = baseDays <= 0 ? 0 : workDays >= full ? returnHomeRate : workDays >= half ? returnHomeRate / 2 : 0;
+  return { amount, work_days: workDays, base_days: baseDays, half_threshold_days: half, full_threshold_days: full };
+}
+
 /** Groups attendance_report rows by date and classifies every day of the month. */
 export function classifyMonth(year: number, month: number, rows: DayRuleRow[]): AllowanceReportDay[] {
   const byDate = new Map<string, DayRuleRow[]>();

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, type RowDataPacket } from "@/lib/db";
-import { classifyMonth, type DayRuleRow } from "@/lib/dayRules";
+import { classifyMonth, returnHomeBonus, type DayRuleRow } from "@/lib/dayRules";
 import type { ApiError, MileageEntry, MileageForm, MileageOtherItem } from "@/lib/types";
 
 interface ReportRow extends RowDataPacket, DayRuleRow {
@@ -29,7 +29,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<MileageFor
   const year: number = yearNum;
 
   try {
-    const employees = await query<RowDataPacket[]>("SELECT id, emp_code, name FROM employees WHERE id = ?", [employeeId]);
+    const employees = await query<RowDataPacket[]>(
+      "SELECT id, emp_code, name, return_home_rate FROM employees WHERE id = ?",
+      [employeeId]
+    );
     if (employees.length === 0) {
       return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
@@ -58,10 +61,29 @@ export async function GET(request: NextRequest): Promise<NextResponse<MileageFor
     }
 
     const claims = await query<RowDataPacket[]>(
-      "SELECT id, rate_per_km, remarks FROM mileage_claim WHERE employee_id = ? AND month = ? AND year = ?",
+      "SELECT id, rate_per_km, telephone_amount, remarks FROM mileage_claim WHERE employee_id = ? AND month = ? AND year = ?",
       [employeeId, month, year]
     );
     const claim = claims[0];
+
+    // Telephone: this month's saved amount, else the most recent amount saved in an earlier month.
+    let telephoneAmount = 0;
+    let telephoneSource: MileageForm["telephone_source"] = "none";
+    if (claim && claim.telephone_amount !== null) {
+      telephoneAmount = Number(claim.telephone_amount);
+      telephoneSource = "this_month";
+    } else {
+      const previous = await query<RowDataPacket[]>(
+        `SELECT telephone_amount FROM mileage_claim
+         WHERE employee_id = ? AND telephone_amount IS NOT NULL AND (year < ? OR (year = ? AND month < ?))
+         ORDER BY year DESC, month DESC LIMIT 1`,
+        [employeeId, year, year, month]
+      );
+      if (previous.length > 0) {
+        telephoneAmount = Number(previous[0].telephone_amount);
+        telephoneSource = "last_saved";
+      }
+    }
     let entries: MileageEntry[] = [];
     let otherItems: MileageOtherItem[] = [];
     if (claim) {
@@ -97,6 +119,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<MileageFor
       year,
       rate_per_km: claim ? Number(claim.rate_per_km) : 5,
       remarks: claim?.remarks ?? null,
+      telephone_amount: telephoneAmount,
+      telephone_source: telephoneSource,
+      return_home_amount: returnHomeBonus(year, month, rows, Number(employee.return_home_rate)).amount,
       days: classifyMonth(year, month, rows),
       entries,
       other_items: otherItems,

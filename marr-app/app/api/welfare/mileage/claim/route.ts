@@ -3,8 +3,8 @@ import pool, { type ResultSetHeader } from "@/lib/db";
 import type { ApiError, MileageClaimRequest, MileageOtherItem } from "@/lib/types";
 
 /**
- * PUT: saves the month's claim settings (rate per km, remarks) and replaces its other-income
- * lines (Telephone & Internet, Go back home, ...).
+ * PUT: saves the month's claim settings (rate per km, telephone amount, remarks) and replaces its
+ * extra other-income lines.
  */
 export async function PUT(request: NextRequest): Promise<NextResponse<{ success: true } | ApiError>> {
   let body: Partial<MileageClaimRequest>;
@@ -27,6 +27,10 @@ export async function PUT(request: NextRequest): Promise<NextResponse<{ success:
   if (typeof rate_per_km !== "number" || !Number.isFinite(rate_per_km) || rate_per_km < 0) {
     return NextResponse.json({ error: "rate_per_km must be a number >= 0" }, { status: 400 });
   }
+  const { telephone_amount } = body;
+  if (typeof telephone_amount !== "number" || !Number.isFinite(telephone_amount) || telephone_amount < 0) {
+    return NextResponse.json({ error: "telephone_amount must be a number >= 0" }, { status: 400 });
+  }
   const items: MileageOtherItem[] = Array.isArray(other_items) ? other_items : [];
   for (const item of items) {
     if (typeof item?.description !== "string" || !item.description.trim()) {
@@ -41,15 +45,17 @@ export async function PUT(request: NextRequest): Promise<NextResponse<{ success:
   const monthNum: number = month as number;
   const yearNum: number = year as number;
   const rate: number = rate_per_km;
+  const telephone: number = telephone_amount;
   const remarks: string | null = typeof body.remarks === "string" && body.remarks.trim() ? body.remarks.trim() : null;
 
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
     const [claim] = await connection.execute<ResultSetHeader>(
-      `INSERT INTO mileage_claim (employee_id, month, year, rate_per_km, remarks) VALUES (?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), rate_per_km = VALUES(rate_per_km), remarks = VALUES(remarks)`,
-      [employeeId, monthNum, yearNum, rate, remarks]
+      `INSERT INTO mileage_claim (employee_id, month, year, rate_per_km, telephone_amount, remarks) VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), rate_per_km = VALUES(rate_per_km),
+         telephone_amount = VALUES(telephone_amount), remarks = VALUES(remarks)`,
+      [employeeId, monthNum, yearNum, rate, telephone, remarks]
     );
     const claimId: number = claim.insertId;
 

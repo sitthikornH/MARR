@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { RowDataPacket } from "mysql2/promise";
 import pool from "@/lib/db";
-import { classifyMonth, type DayRuleRow } from "@/lib/dayRules";
+import { returnHomeBonus, type DayRuleRow } from "@/lib/dayRules";
 import type { ApiError, WelfareCalculateRequest, WelfareCalculateResult } from "@/lib/types";
 
 interface DayRuleRowPacket extends RowDataPacket, DayRuleRow {}
@@ -10,8 +10,6 @@ const MIN_ALLOWANCE_HOURS = 4; // allowance needs more than 4h from first check-
 const LUNCH_START_HOUR = 12; // 12:00-13:00 lunch break is not counted toward the 4h
 const LUNCH_END_HOUR = 13;
 const OT_ROUND_UP_MINUTES = 20; // per-day OT remainder: < 20 min dropped, >= 20 min rounds up to the next hour
-const RETURN_HOME_HALF_RATIO = 0.5; // work days >= 50% of base days -> half of return_home_rate
-const RETURN_HOME_FULL_RATIO = 0.8; // work days >= 80% of base days -> full return_home_rate
 interface EmployeeRow extends RowDataPacket {
   id: number;
   base_allowance: number;
@@ -104,18 +102,6 @@ function overlapMinutes(a: Interval[], b: Interval[]): number {
 function roundOtHours(minutes: number): number {
   const whole = Math.floor(minutes / 60);
   return minutes - whole * 60 >= OT_ROUND_UP_MINUTES ? whole + 1 : whole;
-}
-
-const isSunday = (date: string) => new Date(`${date}T00:00:00`).getDay() === 0;
-
-/** Number of Sundays in the month. */
-function sundayCount(year: number, month: number): number {
-  const daysInMonth = new Date(year, month, 0).getDate();
-  let sundays = 0;
-  for (let day = 1; day <= daysInMonth; day++) {
-    if (new Date(year, month - 1, day).getDay() === 0) sundays++;
-  }
-  return sundays;
 }
 
 export async function POST(
@@ -214,13 +200,8 @@ export async function POST(
     }
     const totalOt = totalOtHours * Number(employee.base_ot_rate);
 
-    // Rule 4: Return home bonus, tiered by work days / base days.
-    //   base days = days in month - Sundays - TimeMint company holidays (leave days are not deducted)
-    //   work days < floor(50% of base)         -> 0
-    //   floor(50%) <= work days < floor(80%)   -> half of return_home_rate
-    //   work days >= floor(80% of base)        -> full return_home_rate
-    // Fractions of a day in the thresholds are dropped. Work days are classified from
-    // attendance_report by lib/dayRules.ts (the same rules as the allowance report).
+    // Rule 4: Return home bonus, tiered by work days / base days — see returnHomeBonus() in
+    // lib/dayRules.ts (shared with the mileage form).
     const [reportRows] = await connection.execute<DayRuleRowPacket[]>(
       `SELECT date, start_work_at, get_off_work_at, time_in, time_out, notice, place, row_type, day_type, holiday_name
        FROM attendance_report
@@ -228,19 +209,8 @@ export async function POST(
        ORDER BY date ASC, id ASC`,
       [employeeId, yearNum, monthNum]
     );
-    const days = classifyMonth(yearNum, monthNum, reportRows);
-    const workDays = days.filter((d) => d.work_day).length;
-    // Company holidays come from the imported attendance_report rows; one falling on a Sunday is
-    // already deducted with the Sundays.
-    const companyHolidays = new Set(
-      reportRows.filter((r) => r.day_type === "company_holiday" && !isSunday(r.date)).map((r) => r.date)
-    );
-    const baseDays = days.length - sundayCount(yearNum, monthNum) - companyHolidays.size;
-    const halfThreshold = Math.floor(baseDays * RETURN_HOME_HALF_RATIO + 1e-9);
-    const fullThreshold = Math.floor(baseDays * RETURN_HOME_FULL_RATIO + 1e-9);
-    const returnHomeRate = Number(employee.return_home_rate);
-    const totalReturnHome =
-      baseDays <= 0 ? 0 : workDays >= fullThreshold ? returnHomeRate : workDays >= halfThreshold ? returnHomeRate / 2 : 0;
+    const bonus = returnHomeBonus(yearNum, monthNum, reportRows, Number(employee.return_home_rate));
+    const totalReturnHome = bonus.amount;
 
     await connection.execute(
       `INSERT INTO welfare_summary
@@ -265,10 +235,10 @@ export async function POST(
       total_ot: totalOt,
       total_return_home: totalReturnHome,
       ot_hours: totalOtHours,
-      work_days: workDays,
-      base_days: baseDays,
-      half_threshold_days: halfThreshold,
-      full_threshold_days: fullThreshold,
+      work_days: bonus.work_days,
+      base_days: bonus.base_days,
+      half_threshold_days: bonus.half_threshold_days,
+      full_threshold_days: bonus.full_threshold_days,
     };
 
     return NextResponse.json(result, { status: 200 });

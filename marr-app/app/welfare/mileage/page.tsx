@@ -13,7 +13,6 @@ interface Draft {
   from_place: string;
   to_place: string;
   km: string;
-  site: string;
 }
 
 const money = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -34,12 +33,11 @@ function toDraft(entry: MileageEntry): Draft {
     from_place: entry.from_place ?? "",
     to_place: entry.to_place ?? "",
     km: String(entry.km),
-    site: entry.site ?? "",
   };
 }
 
 function sameDraft(a: Draft, b: Draft): boolean {
-  return a.time === b.time && a.from_place === b.from_place && a.to_place === b.to_place && Number(a.km) === Number(b.km) && a.site === b.site;
+  return a.time === b.time && a.from_place === b.from_place && a.to_place === b.to_place && Number(a.km) === Number(b.km);
 }
 
 function FormView() {
@@ -55,6 +53,7 @@ function FormView() {
   const [rowState, setRowState] = useState<Record<string, { saving?: boolean; error?: string }>>({});
 
   const [rate, setRate] = useState("5");
+  const [telephone, setTelephone] = useState("0");
   const [remarks, setRemarks] = useState("");
   const [items, setItems] = useState<MileageOtherItem[]>([]);
   const [claimSaving, setClaimSaving] = useState(false);
@@ -71,13 +70,14 @@ function FormView() {
         setRate(String(f.rate_per_km));
         setRemarks(f.remarks ?? "");
         setItems(f.other_items);
+        setTelephone(String(f.telephone_amount));
 
         const byDate: Record<string, MileageEntry> = {};
         for (const e of f.entries) byDate[e.date] = e;
         setSubmitted(byDate);
 
         // Unsubmitted rows start from the day's shift time and check-in places, and repeat the most
-        // recently submitted From / Site.
+        // recently submitted From.
         const latest = [...f.entries].sort((a, b) => b.date.localeCompare(a.date))[0];
         const initial: Record<string, Draft> = {};
         for (const day of f.days) {
@@ -88,7 +88,6 @@ function FormView() {
               from_place: latest?.from_place ?? DEFAULT_FROM,
               to_place: day.site ?? "",
               km: "",
-              site: latest?.site ?? "",
             };
           }
         }
@@ -139,6 +138,11 @@ function FormView() {
       setClaimMessage("Rate per KM must be 0 or more.");
       return;
     }
+    const telephoneValue = Number(telephone);
+    if (telephone.trim() === "" || !Number.isFinite(telephoneValue) || telephoneValue < 0) {
+      setClaimMessage("Telephone must be 0 or more.");
+      return;
+    }
     if (items.some((i) => !i.description.trim() || !Number.isFinite(i.amount))) {
       setClaimMessage("Every line needs a description and an amount.");
       return;
@@ -154,6 +158,7 @@ function FormView() {
           month: form!.month,
           year: form!.year,
           rate_per_km: rateNum,
+          telephone_amount: telephoneValue,
           remarks,
           other_items: items,
         }),
@@ -172,7 +177,12 @@ function FormView() {
   const rateNum = Number(rate) || 0;
   const totalKm = Object.values(submitted).reduce((sum, e) => sum + e.km, 0);
   const totalMileage = totalKm * rateNum;
-  const totalOther = totalMileage + items.reduce((sum, i) => sum + (Number.isFinite(i.amount) ? i.amount : 0), 0);
+  const telephoneNum = Number(telephone) || 0;
+  const totalOther =
+    totalMileage +
+    form.return_home_amount +
+    telephoneNum +
+    items.reduce((sum, i) => sum + (Number.isFinite(i.amount) ? i.amount : 0), 0);
   const inputDates = Object.keys(drafts);
   const pendingCount = inputDates.filter((d) => !submitted[d] || !sameDraft(drafts[d], toDraft(submitted[d]))).length;
 
@@ -219,7 +229,7 @@ function FormView() {
           OTHER INCOME FOR MILEAGE AND TELEPHONE CHARGE
         </p>
 
-        <div className="mt-2 grid grid-cols-[1.45fr_1fr] gap-4">
+        <div className="mt-2 grid grid-cols-[1.6fr_1fr] gap-4">
           {/* Left column */}
           <div className="space-y-3">
             <table className="w-full border-collapse">
@@ -254,10 +264,19 @@ function FormView() {
               <span>/ KM</span>
             </div>
 
-            <table className="w-full border-collapse">
+            <table className="w-full table-fixed border-collapse">
+              {/* Fixed widths for everything but "To", which takes the rest so places show in full. */}
+              <colgroup>
+                <col className="w-[72px]" />
+                <col className="w-[78px]" />
+                <col className="w-[64px]" />
+                <col />
+                <col className="w-[52px]" />
+                <col className="w-[60px] print:w-0" />
+              </colgroup>
               <thead>
                 <tr>
-                  <th className={`${cell} text-left`} colSpan={7}>
+                  <th className={`${cell} text-left`} colSpan={6}>
                     Month : {monthLabel}
                   </th>
                 </tr>
@@ -267,7 +286,6 @@ function FormView() {
                   <th className={cell}>From</th>
                   <th className={cell}>To</th>
                   <th className={cell}>TOTAL KM.</th>
-                  <th className={cell}>Site</th>
                   <th className={`${cell} print:hidden`}></th>
                 </tr>
               </thead>
@@ -288,7 +306,6 @@ function FormView() {
                           <span className="block text-center">{day.kind === "leave" ? day.site : ""}</span>
                         </td>
                         <td className={`${cell} text-center`}>{day.kind === "holiday" ? "X" : ""}</td>
-                        <td className={cell}></td>
                         <td className={`${cell} print:hidden`}></td>
                       </tr>
                     );
@@ -301,11 +318,12 @@ function FormView() {
                         step={type === "number" ? "0.1" : undefined}
                         min={type === "number" ? "0" : undefined}
                         value={draft[name]}
+                        title={draft[name]}
                         placeholder={placeholder}
                         onChange={(e) => setDraft(day.date, name, e.target.value)}
                         className={input}
                       />
-                      <span className="hidden print:block text-center">
+                      <span className="hidden print:block text-center break-words">
                         {saved ? (name === "km" ? saved.km : saved[name] ?? "") : name === "to_place" ? draft.to_place : ""}
                       </span>
                     </>
@@ -314,12 +332,11 @@ function FormView() {
                   return (
                     <tr key={day.date} className={`${shade} ${dirty ? "bg-amber-50 print:bg-transparent" : ""}`}>
                       <td className={`${cell} text-center`}>{formatDate(day.date)}</td>
-                      <td className={`${cell} w-20`}>{field("time")}</td>
-                      <td className={`${cell} w-20`}>{field("from_place")}</td>
+                      <td className={cell}>{field("time")}</td>
+                      <td className={cell}>{field("from_place")}</td>
                       <td className={cell}>{field("to_place")}</td>
-                      <td className={`${cell} w-16`}>{field("km", "km", "number")}</td>
-                      <td className={`${cell} w-20`}>{field("site", "site")}</td>
-                      <td className={`${cell} w-20 text-center print:hidden`}>
+                      <td className={cell}>{field("km", "km", "number")}</td>
+                      <td className={`${cell} text-center print:hidden`}>
                         {state.saving ? (
                           <span className="text-gray-500">Saving...</span>
                         ) : dirty ? (
@@ -387,6 +404,33 @@ function FormView() {
                   <td className={`${cell} text-right`}>{money(totalMileage)}</td>
                   <td className={`${cell} print:hidden`}></td>
                 </tr>
+                <tr>
+                  <td className={cell}>ค่ากลับบ้าน</td>
+                  <td className={`${cell} text-center`}>{monthLabel}</td>
+                  <td className={`${cell} text-right`}>{money(form.return_home_amount)}</td>
+                  <td className={`${cell} print:hidden`}></td>
+                </tr>
+                <tr>
+                  <td className={cell}>
+                    Telephone
+                    {form.telephone_source === "last_saved" && (
+                      <span className="ml-1 text-[10px] text-amber-700 print:hidden">(from last saved)</span>
+                    )}
+                  </td>
+                  <td className={`${cell} text-center`}>{monthLabel}</td>
+                  <td className={cell}>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={telephone}
+                      onChange={(e) => setTelephone(e.target.value)}
+                      className="w-full bg-transparent text-right outline-none focus:bg-yellow-50 print:hidden"
+                    />
+                    <span className="hidden print:block text-right">{money(telephoneNum)}</span>
+                  </td>
+                  <td className={`${cell} print:hidden`}></td>
+                </tr>
                 {items.map((item, i) => (
                   <tr key={i}>
                     <td className={cell}>
@@ -429,7 +473,7 @@ function FormView() {
                         setItems([
                           ...items,
                           {
-                            description: items.length === 0 ? "Telephone & Internet" : "",
+                            description: "",
                             period: monthLabel,
                             amount: 0,
                           },
@@ -457,7 +501,7 @@ function FormView() {
                 disabled={claimSaving}
                 className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-700 disabled:opacity-50"
               >
-                {claimSaving ? "Saving..." : "Save rate, other income & remarks"}
+                {claimSaving ? "Saving..." : "Save rate, telephone, other income & remarks"}
               </button>
               {claimMessage && <span className="text-xs text-gray-600">{claimMessage}</span>}
             </div>
@@ -490,6 +534,12 @@ function FormView() {
                 ))}
                 <li className="border-b border-dotted border-gray-800 pb-0.5">
                   KM {money(totalKm)} × {money(rateNum)} = {money(totalMileage)}
+                </li>
+                <li className="border-b border-dotted border-gray-800 pb-0.5">
+                  ค่ากลับบ้าน {monthLabel} = {money(form.return_home_amount)}
+                </li>
+                <li className="border-b border-dotted border-gray-800 pb-0.5">
+                  Telephone {monthLabel} = {money(telephoneNum)}
                 </li>
                 {items.map((item, i) => (
                   <li key={i} className="border-b border-dotted border-gray-800 pb-0.5">

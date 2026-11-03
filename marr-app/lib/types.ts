@@ -198,6 +198,9 @@ export interface MileageForm {
   year: number;
   rate_per_km: number;
   remarks: string | null;
+  telephone_amount: number; // this month's saved value, else the latest saved in an earlier month, else 0
+  telephone_source: "this_month" | "last_saved" | "none";
+  return_home_amount: number; // welfare rule 4 for this month (lib/dayRules.ts returnHomeBonus)
   days: AllowanceReportDay[]; // day kind, shift time and check-in places (pre-fill for "To")
   entries: MileageEntry[]; // submitted rows
   other_items: MileageOtherItem[];
@@ -213,6 +216,7 @@ export interface MileageClaimRequest {
   month: number;
   year: number;
   rate_per_km: number;
+  telephone_amount: number;
   remarks: string | null;
   other_items: MileageOtherItem[];
 }
