@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS mileage_entry (
   id INT AUTO_INCREMENT PRIMARY KEY,
   claim_id INT NOT NULL,
   date DATE NOT NULL,
+  seq INT NOT NULL DEFAULT 1, -- leg of the day: 1 = accommodation -> first place, 2 = first -> second place, ...
   time VARCHAR(20) NULL,
   from_place VARCHAR(255) NULL,
   to_place VARCHAR(255) NULL,
@@ -127,7 +128,7 @@ CREATE TABLE IF NOT EXISTS mileage_entry (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_mileage_entry_claim FOREIGN KEY (claim_id)
     REFERENCES mileage_claim(id) ON DELETE CASCADE,
-  UNIQUE KEY uq_mileage_entry_claim_date (claim_id, date)
+  UNIQUE KEY uq_mileage_entry_claim_date_seq (claim_id, date, seq)
 );
 
 CREATE TABLE IF NOT EXISTS mileage_other_item (
@@ -148,6 +149,9 @@ CREATE TABLE IF NOT EXISTS mileage_other_item (
 --   ADD COLUMN department VARCHAR(255) NULL AFTER holiday_name,
 --   ADD COLUMN approver_code VARCHAR(255) NULL AFTER department;
 -- ALTER TABLE mileage_claim ADD COLUMN telephone_amount DECIMAL(10,2) NULL AFTER rate_per_km;
+-- ALTER TABLE mileage_entry ADD COLUMN seq INT NOT NULL DEFAULT 1 AFTER date,
+--   ADD UNIQUE KEY uq_mileage_entry_claim_date_seq (claim_id, date, seq);
+-- ALTER TABLE mileage_entry DROP INDEX uq_mileage_entry_claim_date;
 
 -- Single-row system settings (id is always 1)
 CREATE TABLE IF NOT EXISTS app_settings (

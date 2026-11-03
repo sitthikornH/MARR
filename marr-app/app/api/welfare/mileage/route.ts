@@ -47,6 +47,15 @@ export async function GET(request: NextRequest): Promise<NextResponse<MileageFor
       [employeeId, year, month]
     );
 
+    // Each day's check-in places in time order (rows are stored in time order), with consecutive
+    // repeats collapsed: Office, Office, Site B, Office -> Office, Site B, Office. One mileage leg each.
+    const dayPlaces: Record<string, string[]> = {};
+    for (const row of rows) {
+      if (row.row_type !== "checklog" || !row.place) continue;
+      const places = (dayPlaces[row.date] ??= []);
+      if (places[places.length - 1] !== row.place) places.push(row.place);
+    }
+
     const placeCounts = new Map<string, number>();
     for (const row of rows) {
       if (row.row_type === "checklog" && row.place) placeCounts.set(row.place, (placeCounts.get(row.place) ?? 0) + 1);
@@ -89,11 +98,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<MileageFor
     if (claim) {
       const claimId: number = claim.id;
       const entryRows = await query<RowDataPacket[]>(
-        "SELECT date, time, from_place, to_place, km, site FROM mileage_entry WHERE claim_id = ? ORDER BY date",
+        "SELECT date, seq, time, from_place, to_place, km, site FROM mileage_entry WHERE claim_id = ? ORDER BY date, seq",
         [claimId]
       );
       entries = entryRows.map((r) => ({
         date: r.date,
+        seq: Number(r.seq),
         time: r.time,
         from_place: r.from_place,
         to_place: r.to_place,
@@ -123,6 +133,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MileageFor
       telephone_source: telephoneSource,
       return_home_amount: returnHomeBonus(year, month, rows, Number(employee.return_home_rate)).amount,
       days: classifyMonth(year, month, rows),
+      day_places: dayPlaces,
       entries,
       other_items: otherItems,
       imported_days: new Set(rows.map((r) => r.date)).size,

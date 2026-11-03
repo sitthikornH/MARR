@@ -36,6 +36,8 @@ function toDraft(entry: MileageEntry): Draft {
   };
 }
 
+const legKey = (date: string, seq: number) => `${date}#${seq}`;
+
 function sameDraft(a: Draft, b: Draft): boolean {
   return a.time === b.time && a.from_place === b.from_place && a.to_place === b.to_place && Number(a.km) === Number(b.km);
 }
@@ -51,6 +53,7 @@ function FormView() {
   const [submitted, setSubmitted] = useState<Record<string, MileageEntry>>({});
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [rowState, setRowState] = useState<Record<string, { saving?: boolean; error?: string }>>({});
+  const [legCounts, setLegCounts] = useState<Record<string, number>>({}); // date -> number of legs (rows)
 
   const [rate, setRate] = useState("5");
   const [telephone, setTelephone] = useState("0");
@@ -72,25 +75,34 @@ function FormView() {
         setItems(f.other_items);
         setTelephone(String(f.telephone_amount));
 
-        const byDate: Record<string, MileageEntry> = {};
-        for (const e of f.entries) byDate[e.date] = e;
-        setSubmitted(byDate);
+        const byKey: Record<string, MileageEntry> = {};
+        for (const e of f.entries) byKey[legKey(e.date, e.seq)] = e;
+        setSubmitted(byKey);
 
-        // Unsubmitted rows start from the day's shift time and check-in places, and repeat the most
-        // recently submitted From.
-        const latest = [...f.entries].sort((a, b) => b.date.localeCompare(a.date))[0];
+        // One leg per check-in place of the day: leg 1 goes from the accommodation to the first
+        // place, each next leg from the previous place to the next one. Unsubmitted legs start from
+        // that; submitted ones show what was saved.
         const initial: Record<string, Draft> = {};
+        const counts: Record<string, number> = {};
         for (const day of f.days) {
-          if (byDate[day.date]) initial[day.date] = toDraft(byDate[day.date]);
-          else if (INPUT_KINDS.includes(day.kind)) {
-            initial[day.date] = {
-              time: day.time ?? "",
-              from_place: latest?.from_place ?? DEFAULT_FROM,
-              to_place: day.site ?? "",
-              km: "",
-            };
+          const places = f.day_places[day.date] ?? [];
+          const savedSeqs = f.entries.filter((e) => e.date === day.date).map((e) => e.seq);
+          const legs = Math.max(INPUT_KINDS.includes(day.kind) ? Math.max(places.length, 1) : 0, ...savedSeqs, 0);
+          if (legs === 0) continue;
+          counts[day.date] = legs;
+          for (let seq = 1; seq <= legs; seq++) {
+            const key = legKey(day.date, seq);
+            initial[key] = byKey[key]
+              ? toDraft(byKey[key])
+              : {
+                  time: seq === 1 ? day.time ?? "" : "",
+                  from_place: seq === 1 ? DEFAULT_FROM : places[seq - 2] ?? "",
+                  to_place: places[seq - 1] ?? "",
+                  km: "",
+                };
           }
         }
+        setLegCounts(counts);
         setDrafts(initial);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
@@ -102,33 +114,34 @@ function FormView() {
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!form) return <p className="text-sm text-gray-500">Loading form...</p>;
 
-  function setDraft(date: string, field: keyof Draft, value: string) {
-    setDrafts({ ...drafts, [date]: { ...drafts[date], [field]: value } });
-    setRowState({ ...rowState, [date]: {} });
+  function setDraft(key: string, field: keyof Draft, value: string) {
+    setDrafts({ ...drafts, [key]: { ...drafts[key], [field]: value } });
+    setRowState({ ...rowState, [key]: {} });
   }
 
-  async function submitRow(date: string) {
-    const draft = drafts[date];
+  async function submitRow(date: string, seq: number) {
+    const key = legKey(date, seq);
+    const draft = drafts[key];
     const km = Number(draft.km);
     if (draft.km.trim() === "" || !Number.isFinite(km) || km < 0) {
-      setRowState({ ...rowState, [date]: { error: "Enter KM (0 or more)" } });
+      setRowState({ ...rowState, [key]: { error: "Enter KM (0 or more)" } });
       return;
     }
-    setRowState({ ...rowState, [date]: { saving: true } });
+    setRowState({ ...rowState, [key]: { saving: true } });
     try {
       const res = await fetch("/api/welfare/mileage/entry", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employee_id: Number(employeeId), date, ...draft, km }),
+        body: JSON.stringify({ employee_id: Number(employeeId), date, seq, ...draft, km }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to submit");
       const entry = data as MileageEntry;
-      setSubmitted((s) => ({ ...s, [date]: entry }));
-      setDrafts((d) => ({ ...d, [date]: toDraft(entry) }));
-      setRowState((r) => ({ ...r, [date]: {} }));
+      setSubmitted((s) => ({ ...s, [key]: entry }));
+      setDrafts((d) => ({ ...d, [key]: toDraft(entry) }));
+      setRowState((r) => ({ ...r, [key]: {} }));
     } catch (err) {
-      setRowState((r) => ({ ...r, [date]: { error: err instanceof Error ? err.message : "Failed" } }));
+      setRowState((r) => ({ ...r, [key]: { error: err instanceof Error ? err.message : "Failed" } }));
     }
   }
 
@@ -183,8 +196,8 @@ function FormView() {
     form.return_home_amount +
     telephoneNum +
     items.reduce((sum, i) => sum + (Number.isFinite(i.amount) ? i.amount : 0), 0);
-  const inputDates = Object.keys(drafts);
-  const pendingCount = inputDates.filter((d) => !submitted[d] || !sameDraft(drafts[d], toDraft(submitted[d]))).length;
+  const inputKeys = Object.keys(drafts);
+  const pendingCount = inputKeys.filter((k) => !submitted[k] || !sameDraft(drafts[k], toDraft(submitted[k]))).length;
 
   const autoRemarks = [
     ...form.days.filter((d) => d.kind === "leave").map((d) => `${longDate(d.date)} : ${d.site}`),
@@ -204,7 +217,7 @@ function FormView() {
           ← Back
         </Link>
         <p className="text-sm text-gray-700">
-          {inputDates.length - pendingCount} of {inputDates.length} rows submitted
+          {inputKeys.length - pendingCount} of {inputKeys.length} rows submitted
           {pendingCount > 0 && <span className="ml-1 text-amber-700">({pendingCount} waiting for input)</span>}
         </p>
         <button
@@ -290,15 +303,12 @@ function FormView() {
                 </tr>
               </thead>
               <tbody>
-                {form.days.map((day) => {
-                  const draft = drafts[day.date];
-                  const saved = submitted[day.date];
-                  const state = rowState[day.date] ?? {};
-                  const dirty = draft && (!saved || !sameDraft(draft, toDraft(saved)));
+                {form.days.flatMap((day) => {
                   const shade = day.kind === "holiday" || day.kind === "holiday_work" ? "bg-gray-100" : "";
+                  const legs = legCounts[day.date] ?? 0;
 
-                  if (!draft) {
-                    return (
+                  if (legs === 0) {
+                    return [
                       <tr key={day.date} className={shade}>
                         <td className={`${cell} text-center`}>{formatDate(day.date)}</td>
                         <td className={`${cell} text-center`}>{day.kind === "leave" ? day.time ?? "" : ""}</td>
@@ -307,52 +317,61 @@ function FormView() {
                         </td>
                         <td className={`${cell} text-center`}>{day.kind === "holiday" ? "X" : ""}</td>
                         <td className={`${cell} print:hidden`}></td>
-                      </tr>
-                    );
+                      </tr>,
+                    ];
                   }
 
-                  const field = (name: keyof Draft, placeholder = "", type = "text") => (
-                    <>
-                      <input
-                        type={type}
-                        step={type === "number" ? "0.1" : undefined}
-                        min={type === "number" ? "0" : undefined}
-                        value={draft[name]}
-                        title={draft[name]}
-                        placeholder={placeholder}
-                        onChange={(e) => setDraft(day.date, name, e.target.value)}
-                        className={input}
-                      />
-                      <span className="hidden print:block text-center break-words">
-                        {saved ? (name === "km" ? saved.km : saved[name] ?? "") : name === "to_place" ? draft.to_place : ""}
-                      </span>
-                    </>
-                  );
+                  return Array.from({ length: legs }, (_, i) => {
+                    const seq = i + 1;
+                    const key = legKey(day.date, seq);
+                    const draft = drafts[key];
+                    const saved = submitted[key];
+                    const state = rowState[key] ?? {};
+                    const dirty = !saved || !sameDraft(draft, toDraft(saved));
 
-                  return (
-                    <tr key={day.date} className={`${shade} ${dirty ? "bg-amber-50 print:bg-transparent" : ""}`}>
-                      <td className={`${cell} text-center`}>{formatDate(day.date)}</td>
-                      <td className={cell}>{field("time")}</td>
-                      <td className={cell}>{field("from_place")}</td>
-                      <td className={cell}>{field("to_place")}</td>
-                      <td className={cell}>{field("km", "km", "number")}</td>
-                      <td className={`${cell} text-center print:hidden`}>
-                        {state.saving ? (
-                          <span className="text-gray-500">Saving...</span>
-                        ) : dirty ? (
-                          <button
-                            onClick={() => submitRow(day.date)}
-                            className="rounded bg-gray-900 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-gray-700"
-                          >
-                            {saved ? "Update" : "Submit"}
-                          </button>
-                        ) : (
-                          <span className="text-green-700">✓</span>
-                        )}
-                        {state.error && <p className="text-[10px] text-red-600">{state.error}</p>}
-                      </td>
-                    </tr>
-                  );
+                    const field = (name: keyof Draft, placeholder = "", type = "text") => (
+                      <>
+                        <input
+                          type={type}
+                          step={type === "number" ? "0.1" : undefined}
+                          min={type === "number" ? "0" : undefined}
+                          value={draft[name]}
+                          title={draft[name]}
+                          placeholder={placeholder}
+                          onChange={(e) => setDraft(key, name, e.target.value)}
+                          className={input}
+                        />
+                        <span className="hidden print:block text-center break-words">
+                          {saved ? (name === "km" ? saved.km : saved[name] ?? "") : name === "to_place" ? draft.to_place : ""}
+                        </span>
+                      </>
+                    );
+
+                    return (
+                      <tr key={key} className={`${shade} ${dirty ? "bg-amber-50 print:bg-transparent" : ""}`}>
+                        <td className={`${cell} text-center`}>{formatDate(day.date)}</td>
+                        <td className={cell}>{field("time")}</td>
+                        <td className={cell}>{field("from_place")}</td>
+                        <td className={cell}>{field("to_place")}</td>
+                        <td className={cell}>{field("km", "km", "number")}</td>
+                        <td className={`${cell} text-center print:hidden`}>
+                          {state.saving ? (
+                            <span className="text-gray-500">Saving...</span>
+                          ) : dirty ? (
+                            <button
+                              onClick={() => submitRow(day.date, seq)}
+                              className="rounded bg-gray-900 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-gray-700"
+                            >
+                              {saved ? "Update" : "Submit"}
+                            </button>
+                          ) : (
+                            <span className="text-green-700">✓</span>
+                          )}
+                          {state.error && <p className="text-[10px] text-red-600">{state.error}</p>}
+                        </td>
+                      </tr>
+                    );
+                  });
                 })}
               </tbody>
             </table>

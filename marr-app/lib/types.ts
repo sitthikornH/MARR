@@ -172,6 +172,7 @@ export interface TimeMintImportResult {
 
 export interface MileageEntry {
   date: string;
+  seq: number; // leg of the day: 1 = accommodation -> first place, 2 = first -> second place, ...
   time: string | null;
   from_place: string | null;
   to_place: string | null;
@@ -201,7 +202,8 @@ export interface MileageForm {
   telephone_amount: number; // this month's saved value, else the latest saved in an earlier month, else 0
   telephone_source: "this_month" | "last_saved" | "none";
   return_home_amount: number; // welfare rule 4 for this month (lib/dayRules.ts returnHomeBonus)
-  days: AllowanceReportDay[]; // day kind, shift time and check-in places (pre-fill for "To")
+  days: AllowanceReportDay[]; // day kind and shift time
+  day_places: Record<string, string[]>; // date -> check-in places in time order (repeats in a row collapsed); one leg each
   entries: MileageEntry[]; // submitted rows
   other_items: MileageOtherItem[];
   imported_days: number;

@@ -10,7 +10,7 @@ const text = (value: unknown, max: number): string | null => {
   return trimmed ? trimmed.slice(0, max) : null;
 };
 
-/** PUT: submits (inserts or replaces) one day's mileage row; the month's claim is created on first use. */
+/** PUT: submits (inserts or replaces) one leg (date + seq) of mileage; the month's claim is created on first use. */
 export async function PUT(request: NextRequest): Promise<NextResponse<MileageEntry | ApiError>> {
   let body: Partial<MileageEntryRequest>;
   try {
@@ -26,6 +26,11 @@ export async function PUT(request: NextRequest): Promise<NextResponse<MileageEnt
   if (typeof km !== "number" || !Number.isFinite(km) || km < 0) {
     return NextResponse.json({ error: "km must be a number >= 0" }, { status: 400 });
   }
+  const seq = body.seq ?? 1;
+  if (!Number.isInteger(seq) || seq < 1) {
+    return NextResponse.json({ error: "seq must be an integer >= 1" }, { status: 400 });
+  }
+  const legSeq: number = seq;
   const employeeId: number = employee_id as number;
   const entryDate: string = date;
   const kmValue: number = km;
@@ -48,6 +53,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse<MileageEnt
 
     const entry: MileageEntry = {
       date: entryDate,
+      seq: legSeq,
       time: text(body.time, 20),
       from_place: text(body.from_place, 255),
       to_place: text(body.to_place, 255),
@@ -55,11 +61,11 @@ export async function PUT(request: NextRequest): Promise<NextResponse<MileageEnt
       site: text(body.site, 100),
     };
     await execute(
-      `INSERT INTO mileage_entry (claim_id, date, time, from_place, to_place, km, site)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO mileage_entry (claim_id, date, seq, time, from_place, to_place, km, site)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE time = VALUES(time), from_place = VALUES(from_place),
          to_place = VALUES(to_place), km = VALUES(km), site = VALUES(site)`,
-      [claimId, entry.date, entry.time, entry.from_place, entry.to_place, entry.km, entry.site]
+      [claimId, entry.date, entry.seq, entry.time, entry.from_place, entry.to_place, entry.km, entry.site]
     );
 
     return NextResponse.json(entry, { status: 200 });
