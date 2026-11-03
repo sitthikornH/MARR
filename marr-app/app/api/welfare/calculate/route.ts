@@ -12,9 +12,6 @@ const LUNCH_END_HOUR = 13;
 const OT_ROUND_UP_MINUTES = 20; // per-day OT remainder: < 20 min dropped, >= 20 min rounds up to the next hour
 const RETURN_HOME_HALF_RATIO = 0.5; // work days >= 50% of base days -> half of return_home_rate
 const RETURN_HOME_FULL_RATIO = 0.8; // work days >= 80% of base days -> full return_home_rate
-// Full-day leave types (attendance.leave_type = TimeMint LeaveTypeEN) left out of the base days.
-const RETURN_HOME_EXCLUDED_LEAVE = /vacation|annual leave|sick|personal/i;
-
 interface EmployeeRow extends RowDataPacket {
   id: number;
   base_allowance: number;
@@ -108,8 +105,6 @@ function roundOtHours(minutes: number): number {
   const whole = Math.floor(minutes / 60);
   return minutes - whole * 60 >= OT_ROUND_UP_MINUTES ? whole + 1 : whole;
 }
-
-const isSunday = (date: string) => new Date(`${date}T00:00:00`).getDay() === 0;
 
 /** Number of Sundays in the month. */
 function sundayCount(year: number, month: number): number {
@@ -218,7 +213,7 @@ export async function POST(
     const totalOt = totalOtHours * Number(employee.base_ot_rate);
 
     // Rule 4: Return home bonus, tiered by work days / base days.
-    //   base days = days in month - Sundays - full-day vacation, sick and personal leave days
+    //   base days = days in month - Sundays (leave days are not deducted)
     //   work days < floor(50% of base)         -> 0
     //   floor(50%) <= work days < floor(80%)   -> half of return_home_rate
     //   work days >= floor(80% of base)        -> full return_home_rate
@@ -233,12 +228,7 @@ export async function POST(
     );
     const days = classifyMonth(yearNum, monthNum, reportRows);
     const workDays = days.filter((d) => d.work_day).length;
-    const excludedLeaveDates = new Set(
-      attendanceRows
-        .filter((r) => r.leave_type !== null && RETURN_HOME_EXCLUDED_LEAVE.test(r.leave_type) && !isSunday(r.date))
-        .map((r) => r.date)
-    );
-    const baseDays = days.length - sundayCount(yearNum, monthNum) - excludedLeaveDates.size;
+    const baseDays = days.length - sundayCount(yearNum, monthNum);
     const halfThreshold = Math.floor(baseDays * RETURN_HOME_HALF_RATIO + 1e-9);
     const fullThreshold = Math.floor(baseDays * RETURN_HOME_FULL_RATIO + 1e-9);
     const returnHomeRate = Number(employee.return_home_rate);
