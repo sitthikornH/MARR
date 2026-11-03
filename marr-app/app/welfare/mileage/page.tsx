@@ -561,9 +561,6 @@ function FormView() {
                     {to} : {money(km)} km × {money(rateNum)} = {money(km * rateNum)}
                   </li>
                 ))}
-                <li className="border-b border-dotted border-gray-800 pb-0.5 font-semibold">
-                  KM {money(totalKm)} × {money(rateNum)} = {money(totalMileage)}
-                </li>
                 <li className="border-b border-dotted border-gray-800 pb-0.5">
                   ค่ากลับบ้าน {monthLabel} = {money(form.return_home_amount)}
                 </li>
