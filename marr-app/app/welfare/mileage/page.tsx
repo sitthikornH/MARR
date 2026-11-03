@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import HighlightLegend from "@/app/welfare/HighlightLegend";
+import { dayHighlight, PRINT_COLORS_CSS } from "@/lib/dayHighlight";
 import type { AllowanceReportDay, MileageEntry, MileageForm, MileageOtherItem } from "@/lib/types";
 
 const DEFAULT_FROM = "ที่พัก";
@@ -218,7 +220,7 @@ function FormView() {
 
   return (
     <div className="space-y-4">
-      <style>{`@media print { @page { size: A4; margin: 8mm; } body { background: white !important; } }`}</style>
+      <style>{`@media print { @page { size: A4; margin: 8mm; } body { background: white !important; } ${PRINT_COLORS_CSS} }`}</style>
 
       <div className="print:hidden flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <Link href="/welfare" className="text-sm text-gray-600 underline">
@@ -309,12 +311,12 @@ function FormView() {
               </thead>
               <tbody>
                 {form.days.flatMap((day) => {
-                  const shade = day.kind === "holiday" || day.kind === "holiday_work" ? "bg-gray-100" : "";
+                  const highlight = dayHighlight(day);
                   const legs = legCounts[day.date] ?? 0;
 
                   if (legs === 0) {
                     return [
-                      <tr key={day.date} className={shade}>
+                      <tr key={day.date} className={highlight.bg}>
                         <td className={`${cell} text-center`}>{formatDate(day.date)}</td>
                         <td className={`${cell} text-center`}>{day.kind === "leave" ? day.time ?? "" : ""}</td>
                         <td className={cell} colSpan={2}>
@@ -353,7 +355,7 @@ function FormView() {
                     );
 
                     return (
-                      <tr key={key} className={`${shade} ${dirty ? "bg-amber-50 print:bg-transparent" : ""}`}>
+                      <tr key={key} className={dirty ? `bg-amber-50 ${highlight.printBg}` : highlight.bg}>
                         <td className={`${cell} text-center`}>{formatDate(day.date)}</td>
                         <td className={cell}>{field("time")}</td>
                         <td className={cell}>{field("from_place")}</td>
@@ -380,6 +382,7 @@ function FormView() {
                 })}
               </tbody>
             </table>
+            <HighlightLegend />
 
             <table className="w-full border-collapse">
               <tbody>

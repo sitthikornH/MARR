@@ -56,9 +56,10 @@ const leaveLabel = (notice: string | null) => (notice?.includes("|") ? notice.sp
  * holiday with both a check-in and a check-out and more than 4h excluding lunch.
  */
 export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDay {
-  const empty = { date, time: null, site: null, note: null, work_day: false };
-  if (rows.length === 0) return { ...empty, kind: "none" };
+  if (rows.length === 0) return { date, time: null, site: null, note: null, work_day: false, company_holiday: false, kind: "none" };
 
+  const companyHoliday = rows[0].day_type === "company_holiday";
+  const empty = { date, time: null, site: null, note: null, work_day: false, company_holiday: companyHoliday };
   const isHoliday = rows[0].day_type !== "workday";
   const holidayNote = rows[0].day_type === "company_holiday" ? rows[0].holiday_name || "Company holiday" : null;
   const logs = rows.filter((r) => r.row_type === "checklog");
@@ -101,6 +102,7 @@ export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDa
       site: places.join(", ") || null,
       note: notes.join("; ") || null,
       work_day: kind === "work" || (kind === "holiday_work" && longEnough),
+      company_holiday: companyHoliday,
     };
   }
   if (leaves.length > 0) {

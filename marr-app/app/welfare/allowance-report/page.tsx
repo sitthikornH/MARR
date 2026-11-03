@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import HighlightLegend from "@/app/welfare/HighlightLegend";
+import { dayHighlight, PRINT_COLORS_CSS } from "@/lib/dayHighlight";
 import type { AllowanceReport } from "@/lib/types";
 
 const RATE_TIERS = [350, 300, 250];
@@ -87,7 +89,7 @@ function ReportView() {
 
   return (
     <div className="space-y-4">
-      <style>{`@media print { @page { size: A4; margin: 8mm; } body { background: white !important; } }`}</style>
+      <style>{`@media print { @page { size: A4; margin: 8mm; } body { background: white !important; } ${PRINT_COLORS_CSS} }`}</style>
 
       <div className="print:hidden flex flex-wrap items-end gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <Link href="/welfare" className="text-sm text-gray-600 underline">
@@ -184,7 +186,7 @@ function ReportView() {
               </thead>
               <tbody>
                 {report.days.map((d, i) => (
-                  <tr key={d.date} className={d.kind === "holiday" || d.kind === "holiday_work" ? "bg-gray-100 print:bg-gray-100" : ""}>
+                  <tr key={d.date} className={dayHighlight(d).bg}>
                     <td className={`${cell} text-center`}>{formatDate(d.date)}</td>
                     <td className={`${cell} relative text-center`}>
                       {d.time ?? ""}
@@ -207,6 +209,7 @@ function ReportView() {
                 ))}
               </tbody>
             </table>
+            <HighlightLegend />
 
             <table className="w-full border-collapse">
               <tbody>

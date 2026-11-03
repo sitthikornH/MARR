@@ -139,6 +139,7 @@ export interface AllowanceReportDay {
   site: string | null; // places, leave type, or "X" for a holiday off
   note: string | null; // holiday name, hourly leave, incomplete check-in/out
   work_day: boolean; // counts as a work day for the return-home bonus (lib/dayRules.ts)
+  company_holiday: boolean; // TimeMint annual (company) holiday, as opposed to a weekly holiday
 }
 
 /** Monthly "Other Income for Allowance" report, built from stored attendance_report rows. */
