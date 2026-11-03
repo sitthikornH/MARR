@@ -141,6 +141,32 @@ CREATE TABLE IF NOT EXISTS mileage_other_item (
     REFERENCES mileage_claim(id) ON DELETE CASCADE
 );
 
+-- Login accounts. Employees get one at TimeMint sync (username = email part before @, else emp_code;
+-- first password = TimeMint phone number, then a 4-digit PIN). Admins may have no employee.
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  employee_id INT NULL UNIQUE,
+  username VARCHAR(100) NOT NULL UNIQUE, -- stored lowercase
+  password_hash VARCHAR(255) NULL, -- NULL = no password yet (admin must reset)
+  role VARCHAR(10) NOT NULL DEFAULT 'user', -- 'user' | 'admin'
+  must_change_password TINYINT(1) NOT NULL DEFAULT 1,
+  failed_attempts INT NOT NULL DEFAULT 0,
+  locked_until DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_users_employee FOREIGN KEY (employee_id)
+    REFERENCES employees(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  token_hash CHAR(64) NOT NULL UNIQUE, -- sha256 of the cookie token; the token itself is never stored
+  expires_at DATETIME NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Upgrade for databases whose attendance_report predates the columns above
 -- (run once; MySQL errors if a column already exists, which is safe to ignore):
 -- ALTER TABLE attendance_report

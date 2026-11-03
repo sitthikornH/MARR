@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import { isReturnHomeOption, RETURN_HOME_ERROR } from "@/lib/returnHome";
 import type { ApiError, Employee, EmployeeRatesUpdate } from "@/lib/types";
@@ -8,9 +9,11 @@ interface RouteParams {
 }
 
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: RouteParams
 ): Promise<NextResponse<Employee | ApiError>> {
+  const gate = await requireAuth(request);
+  if ("response" in gate) return gate.response;
   try {
     const { id } = await params;
     const employeeId = Number(id);
@@ -18,6 +21,7 @@ export async function GET(
     if (!Number.isInteger(employeeId)) {
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 });
     }
+    if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
 
     const rows = await query<RowDataPacket[]>(
       "SELECT id, emp_code, name, base_allowance, base_ot_rate, return_home_rate, created_at FROM employees WHERE id = ?",
@@ -37,9 +41,11 @@ export async function GET(
 
 /** Updates an employee's welfare rates. emp_code and name are owned by the TimeMint sync. */
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: RouteParams
 ): Promise<NextResponse<Employee | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   try {
     const { id } = await params;
     const employeeId = Number(id);
@@ -88,9 +94,11 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: NextRequest,
   { params }: RouteParams
 ): Promise<NextResponse<{ success: true } | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   try {
     const { id } = await params;
     const employeeId = Number(id);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { RowDataPacket } from "mysql2/promise";
+import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
 import pool from "@/lib/db";
 import { returnHomeBonus, type DayRuleRow } from "@/lib/dayRules";
 import type { ApiError, WelfareCalculateRequest, WelfareCalculateResult } from "@/lib/types";
@@ -107,6 +108,8 @@ function roundOtHours(minutes: number): number {
 export async function POST(
   request: NextRequest
 ): Promise<NextResponse<WelfareCalculateResult | ApiError>> {
+  const gate = await requireAuth(request);
+  if ("response" in gate) return gate.response;
   let body: Partial<WelfareCalculateRequest>;
   try {
     body = await request.json();
@@ -132,6 +135,7 @@ export async function POST(
   const employeeId: number = employee_id;
   const monthNum: number = month as number;
   const yearNum: number = year as number;
+  if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
 
   const connection = await pool.getConnection();
 

@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 import { query, type RowDataPacket } from "@/lib/db";
 import type { ApiError, LocationRate } from "@/lib/types";
 
-export async function GET(): Promise<NextResponse<LocationRate[] | ApiError>> {
+export async function GET(request: NextRequest): Promise<NextResponse<LocationRate[] | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   try {
     const rows = await query<RowDataPacket[]>(
       "SELECT id, location_name, travel_fee FROM location_rates ORDER BY location_name ASC"

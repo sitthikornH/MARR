@@ -1,0 +1,87 @@
+// Session auth shared by every API route handler (so, like lib/employeeSync.ts, it imports lib/db).
+// The browser holds a random token in an httpOnly cookie; the DB stores only its sha256.
+import { createHash, randomBytes } from "node:crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { execute, query, type RowDataPacket } from "@/lib/db";
+import type { ApiError, AuthUser } from "@/lib/types";
+
+export const SESSION_COOKIE = "marr_session";
+const SESSION_HOURS = 12;
+
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+
+/** Creates a session for the user and sets its cookie on the response. */
+export async function startSession(response: NextResponse, request: NextRequest, userId: number): Promise<void> {
+  const token = randomBytes(32).toString("base64url");
+  const uid: number = userId;
+  await execute("DELETE FROM sessions WHERE expires_at < NOW()");
+  await execute(
+    "INSERT INTO sessions (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? HOUR))",
+    [uid, sha256(token), SESSION_HOURS]
+  );
+  response.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: request.nextUrl.protocol === "https:",
+    path: "/",
+    maxAge: SESSION_HOURS * 3600,
+  });
+}
+
+export async function endSession(response: NextResponse, request: NextRequest): Promise<void> {
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  if (token) await execute("DELETE FROM sessions WHERE token_hash = ?", [sha256(token)]);
+  response.cookies.set(SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+}
+
+/** The signed-in user for this request, or null. */
+export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  const rows = await query<RowDataPacket[]>(
+    `SELECT u.id, u.username, u.role, u.employee_id, u.must_change_password, e.name AS employee_name
+     FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN employees e ON e.id = u.employee_id
+     WHERE s.token_hash = ? AND s.expires_at > NOW()`,
+    [sha256(token)]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    user_id: row.id,
+    username: row.username,
+    role: row.role === "admin" ? "admin" : "user",
+    employee_id: row.employee_id,
+    employee_name: row.employee_name ?? null,
+    must_change_password: Boolean(row.must_change_password),
+  };
+}
+
+type Gate = { auth: AuthUser } | { response: NextResponse<ApiError> };
+
+/**
+ * Route-handler guard. Usage:
+ *   const gate = await requireAuth(request, { admin: true });
+ *   if ("response" in gate) return gate.response;
+ * Users who still have to change their first password are blocked unless allowMustChange is set.
+ */
+export async function requireAuth(
+  request: NextRequest,
+  options: { admin?: boolean; allowMustChange?: boolean } = {}
+): Promise<Gate> {
+  const auth = await getAuth(request);
+  if (!auth) return { response: NextResponse.json({ error: "Please log in" }, { status: 401 }) };
+  if (auth.must_change_password && !options.allowMustChange) {
+    return { response: NextResponse.json({ error: "Please set a new password first" }, { status: 403 }) };
+  }
+  if (options.admin && auth.role !== "admin") {
+    return { response: NextResponse.json({ error: "Admin only" }, { status: 403 }) };
+  }
+  return { auth };
+}
+
+/** Admins see every employee; a user sees only their own record. */
+export function canAccessEmployee(auth: AuthUser, employeeId: number): boolean {
+  return auth.role === "admin" || auth.employee_id === employeeId;
+}
+
+export const forbidden = () => NextResponse.json({ error: "You can only view your own records" }, { status: 403 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import type { ApiError, MileageEntry, MileageEntryRequest } from "@/lib/types";
 
@@ -12,6 +13,8 @@ const text = (value: unknown, max: number): string | null => {
 
 /** PUT: submits (inserts or replaces) one leg (date + seq) of mileage; the month's claim is created on first use. */
 export async function PUT(request: NextRequest): Promise<NextResponse<MileageEntry | ApiError>> {
+  const gate = await requireAuth(request);
+  if ("response" in gate) return gate.response;
   let body: Partial<MileageEntryRequest>;
   try {
     body = await request.json();
@@ -32,6 +35,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse<MileageEnt
   }
   const legSeq: number = seq;
   const employeeId: number = employee_id as number;
+  if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
   const entryDate: string = date;
   const kmValue: number = km;
   const year: number = Number(entryDate.slice(0, 4));

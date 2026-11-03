@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import type { ApiError, Attendance } from "@/lib/types";
 
@@ -7,9 +8,11 @@ interface RouteParams {
 }
 
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: RouteParams
 ): Promise<NextResponse<Attendance | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   try {
     const { id } = await params;
     const attendanceId = Number(id);
@@ -35,9 +38,11 @@ export async function GET(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: NextRequest,
   { params }: RouteParams
 ): Promise<NextResponse<{ success: true } | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   try {
     const { id } = await params;
     const attendanceId = Number(id);

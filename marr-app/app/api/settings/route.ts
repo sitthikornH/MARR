@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 import { execute } from "@/lib/db";
 import { getSettings, SYNC_INTERVAL_OPTIONS } from "@/lib/employeeSync";
 import type { ApiError, AppSettings, AppSettingsUpdate } from "@/lib/types";
 
-export async function GET(): Promise<NextResponse<AppSettings | ApiError>> {
+export async function GET(request: NextRequest): Promise<NextResponse<AppSettings | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   try {
     return NextResponse.json(await getSettings(), { status: 200 });
   } catch (error) {
@@ -13,6 +16,8 @@ export async function GET(): Promise<NextResponse<AppSettings | ApiError>> {
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse<AppSettings | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   try {
     const body = (await request.json()) as Partial<AppSettingsUpdate>;
     const { auto_sync_enabled, sync_interval_minutes } = body;

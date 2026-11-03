@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import type { ApiError, Attendance, NewAttendance } from "@/lib/types";
 
 export async function GET(request: NextRequest): Promise<NextResponse<Attendance[] | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   try {
     const searchParams = request.nextUrl.searchParams;
     const employeeId = searchParams.get("employee_id");
@@ -53,6 +56,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<Attendance
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<Attendance | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   try {
     const body = (await request.json()) as Partial<NewAttendance>;
     const { employee_id, date, time_in, time_out, location_name, leave_type } = body;

@@ -65,7 +65,17 @@ The `@/*` path alias resolves to the `marr-app/` root (e.g. `@/lib/db`, `@/lib/t
 
 ### Data flow
 
-Pages are client components (`"use client"`) that call the API via relative `fetch` paths (`/api/employees`, etc.) — there is no direct DB access from page components. All DB access goes through `lib/db.ts`'s pooled connection; route handlers under `app/api/**/route.ts` are the only code that imports `lib/db`, with one exception: `lib/employeeSync.ts`, which is shared by the sync/settings routes and the background scheduler.
+Pages are client components (`"use client"`) that call the API via relative `fetch` paths (`/api/employees`, etc.) — there is no direct DB access from page components. All DB access goes through `lib/db.ts`'s pooled connection; route handlers under `app/api/**/route.ts` are the only code that imports `lib/db`, with two exceptions: `lib/employeeSync.ts` (shared by the sync/settings routes and the background scheduler) and `lib/auth.ts` (sessions, used by every route).
+
+### Login and permissions
+
+Every page and API needs a session. `middleware.ts` sends requests without the `marr_session` cookie to `/login` (pages) or answers 401 (API). It only checks that the cookie is present; each route handler validates the session with `requireAuth(request, { admin? })` from `lib/auth.ts` and scopes data with `canAccessEmployee(auth, employeeId)`. **Every new route handler must call `requireAuth`.**
+
+- **Roles:** `user` (employee) sees and edits only their own Welfare Summary, Allowance Report and Mileage form; `admin` sees everyone and is the only role allowed on Employees, Attendance, Import, Settings, sync and `/api/users`. `GET /api/employees` returns only the caller's own row for users, and adds `account` (username, role, has_password, locked) for admins. `app/NavBar.tsx` hides admin links and redirects users away from admin pages, but that's convenience only; the API is the gate.
+- **Accounts:** stored in `users` (one per employee, or an admin with no employee) and `sessions` (sha256 of a random cookie token, 12h). The employee sync creates a missing account via `createEmployeeAccount()`: username = email part before "@" (lowercase), falling back to `emp_code` lowercased when there's no email, the part is shared by several employees, or it's taken. First password = TimeMint `EmpTel` digits (hashed, never stored raw), with `must_change_password = 1`. The sync never changes an existing account.
+- **First login:** until the password is changed, every route except `/api/auth/*` answers 403. Users must pick a 4-digit PIN, admins at least 8 characters (`lib/password.ts`).
+- **Hashing and lockout:** passwords use scrypt from `node:crypto` (`scrypt$N$r$p$salt$hash`). 5 wrong passwords in a row lock the account for 15 minutes.
+- **Admin tools:** `npm run create-admin -- <username> <password> [emp_code]` creates or updates an admin (`scripts/create-admin.mjs`, same hash format). The Employees page's Login column calls `POST /api/users/[employeeId]`, which resets to the TimeMint phone (or an admin-supplied temp password), unlocks, forces a new PIN, ends sessions and creates the account if missing. `PUT /api/users/[employeeId] { role }` switches user/admin; admins can't demote themselves.
 
 ### Employee sync (Settings page)
 

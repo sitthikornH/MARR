@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { isReturnHomeOption, RETURN_HOME_OPTIONS, returnHomeLabel } from "@/lib/returnHome";
-import type { Employee, EmployeeRatesUpdate, NewEmployee } from "@/lib/types";
+import type { Employee, EmployeeAccount, EmployeeRatesUpdate, NewEmployee, UserRole } from "@/lib/types";
 
 const RATE_FIELDS: (keyof EmployeeRatesUpdate)[] = ["base_allowance", "base_ot_rate", "return_home_rate"];
 
@@ -33,6 +33,8 @@ export default function EmployeesPage() {
   const [edits, setEdits] = useState<Record<number, EmployeeRatesUpdate>>({});
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [updatedId, setUpdatedId] = useState<number | null>(null);
+  const [accountBusyId, setAccountBusyId] = useState<number | null>(null);
+  const [accountMessage, setAccountMessage] = useState<string | null>(null);
 
   async function loadEmployees() {
     setLoading(true);
@@ -122,7 +124,7 @@ export default function EmployeesPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to update employee");
 
-      setEmployees(employees.map((e) => (e.id === employee.id ? (data as Employee) : e)));
+      setEmployees(employees.map((e) => (e.id === employee.id ? { ...e, ...(data as Employee) } : e)));
       const rest = { ...edits };
       delete rest[employee.id];
       setEdits(rest);
@@ -131,6 +133,58 @@ export default function EmployeesPage() {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setUpdatingId(null);
+    }
+  }
+
+  function setAccount(employeeId: number, account: EmployeeAccount) {
+    setEmployees((list) => list.map((e) => (e.id === employeeId ? { ...e, account } : e)));
+  }
+
+  async function handleResetLogin(employee: Employee) {
+    setError(null);
+    setAccountMessage(null);
+    const send = (temp?: string) =>
+      fetch(`/api/users/${employee.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(temp ? { temp_password: temp } : {}),
+      });
+    setAccountBusyId(employee.id);
+    try {
+      let res = await send();
+      if (res.status === 422) {
+        const temp = window.prompt(`${employee.emp_code} has no phone number in TimeMint. Enter a temporary password:`);
+        if (!temp) return;
+        res = await send(temp);
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to reset login");
+      setAccount(employee.id, data as EmployeeAccount);
+      setAccountMessage(`${employee.emp_code}: login reset. Username "${(data as EmployeeAccount).username}", first password = phone number.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setAccountBusyId(null);
+    }
+  }
+
+  async function handleRoleChange(employee: Employee, role: UserRole) {
+    setError(null);
+    setAccountMessage(null);
+    setAccountBusyId(employee.id);
+    try {
+      const res = await fetch(`/api/users/${employee.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to change role");
+      setAccount(employee.id, data as EmployeeAccount);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setAccountBusyId(null);
     }
   }
 
@@ -228,6 +282,9 @@ export default function EmployeesPage() {
         </form>
       </section>
 
+      {accountMessage && (
+        <p className="rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800">{accountMessage}</p>
+      )}
       <section className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -238,27 +295,28 @@ export default function EmployeesPage() {
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Allowance</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">OT Rate</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Return Home</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Login</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                     Loading employees...
                   </td>
                 </tr>
               )}
               {!loading && error && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-red-600">
+                  <td colSpan={7} className="px-4 py-6 text-center text-red-600">
                     {error}
                   </td>
                 </tr>
               )}
               {!loading && !error && employees.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                     No employees yet.
                   </td>
                 </tr>
@@ -302,6 +360,33 @@ export default function EmployeesPage() {
                       </td>
                       )
                     )}
+                    <td className="px-4 py-2 whitespace-nowrap text-sm">
+                      {employee.account ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-gray-800">{employee.account.username}</span>
+                          <select
+                            value={employee.account.role}
+                            disabled={accountBusyId === employee.id}
+                            onChange={(e) => handleRoleChange(employee, e.target.value as UserRole)}
+                            className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+                          >
+                            <option value="user">user</option>
+                            <option value="admin">admin</option>
+                          </select>
+                          {!employee.account.has_password && <span className="text-xs text-amber-700">no password</span>}
+                          {employee.account.locked && <span className="text-xs text-red-600">locked</span>}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">no login yet</span>
+                      )}
+                      <button
+                        onClick={() => handleResetLogin(employee)}
+                        disabled={accountBusyId === employee.id}
+                        className="mt-1 text-xs text-gray-600 underline disabled:opacity-50"
+                      >
+                        {employee.account ? "Reset password" : "Create login"}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       {updatedId === employee.id && <span className="mr-3 text-sm text-green-700">Saved</span>}
                       <button

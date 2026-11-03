@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 import { runEmployeeSync } from "@/lib/employeeSync";
 import type { ApiError, EmployeeSyncResult } from "@/lib/types";
 
-export async function POST(): Promise<NextResponse<EmployeeSyncResult | ApiError>> {
+export async function POST(request: NextRequest): Promise<NextResponse<EmployeeSyncResult | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   try {
     const result = await runEmployeeSync();
     return NextResponse.json(result, { status: 200 });

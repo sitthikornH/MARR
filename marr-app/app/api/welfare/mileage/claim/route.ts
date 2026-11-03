@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
 import pool, { type ResultSetHeader } from "@/lib/db";
 import type { ApiError, MileageClaimRequest, MileageOtherItem } from "@/lib/types";
 
@@ -7,6 +8,8 @@ import type { ApiError, MileageClaimRequest, MileageOtherItem } from "@/lib/type
  * extra other-income lines.
  */
 export async function PUT(request: NextRequest): Promise<NextResponse<{ success: true } | ApiError>> {
+  const gate = await requireAuth(request);
+  if ("response" in gate) return gate.response;
   let body: Partial<MileageClaimRequest>;
   try {
     body = await request.json();
@@ -42,6 +45,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse<{ success:
   }
 
   const employeeId: number = employee_id as number;
+  if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
   const monthNum: number = month as number;
   const yearNum: number = year as number;
   const rate: number = rate_per_km;

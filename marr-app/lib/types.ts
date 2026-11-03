@@ -6,6 +6,15 @@ export interface Employee {
   base_ot_rate: number;
   return_home_rate: number;
   created_at: string;
+  // Login account, only in the admin listing (GET /api/employees); null = no account yet
+  account?: EmployeeAccount | null;
+}
+
+export interface EmployeeAccount {
+  username: string;
+  role: UserRole;
+  has_password: boolean;
+  locked: boolean;
 }
 
 export type NewEmployee = Pick<
@@ -91,6 +100,7 @@ export interface EmployeeSyncResult {
   skipped: number;
   // resigned/suspended, or missing/oversized EmpID or name
   ignored: number;
+  accounts_created: number; // login accounts created for employees who had none
 }
 
 export interface TimeMintImportRequest {
@@ -222,6 +232,17 @@ export interface MileageClaimRequest {
   telephone_amount: number;
   remarks: string | null;
   other_items: MileageOtherItem[];
+}
+
+export type UserRole = "user" | "admin";
+
+export interface AuthUser {
+  user_id: number;
+  username: string;
+  role: UserRole;
+  employee_id: number | null; // null for admin-only accounts
+  employee_name: string | null;
+  must_change_password: boolean;
 }
 
 export interface ApiError {

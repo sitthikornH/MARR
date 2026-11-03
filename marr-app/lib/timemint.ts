@@ -69,6 +69,8 @@ export interface TimeMintEmployeeProfile {
   EmpPosition: string | null;
   EmpDepartment: string | null;
   EmpApproverID: string | null;
+  EmpEmail: string | null;
+  EmpTel: string | null;
   EmpWorkTime: string | null; // "HH:MM:SS"
   WorkHoursPerDay: number | null;
   EmpBreakTime: string | null; // break hour, e.g. "12"; empty = no break

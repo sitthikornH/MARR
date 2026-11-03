@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 import pool, { query, type ResultSetHeader, type RowDataPacket } from "@/lib/db";
 import { buildAttendanceReport } from "@/lib/attendanceReport";
 import {
@@ -38,6 +39,8 @@ async function optional<T>(label: string, fallback: T, warnings: string[], run: 
  * rows in the range.
  */
 export async function POST(request: NextRequest): Promise<NextResponse<TimeMintImportResult | ApiError>> {
+  const gate = await requireAuth(request, { admin: true });
+  if ("response" in gate) return gate.response;
   let body: Partial<TimeMintImportRequest>;
   try {
     body = await request.json();

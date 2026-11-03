@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
 import { query, type RowDataPacket } from "@/lib/db";
 import { classifyMonth, type DayRuleRow } from "@/lib/dayRules";
 import type { AllowanceReport, ApiError } from "@/lib/types";
@@ -15,6 +16,8 @@ interface ReportRow extends RowDataPacket, DayRuleRow {
  * stored attendance_report rows (imported from TimeMint on /attendance/import).
  */
 export async function GET(request: NextRequest): Promise<NextResponse<AllowanceReport | ApiError>> {
+  const gate = await requireAuth(request);
+  if ("response" in gate) return gate.response;
   const params = request.nextUrl.searchParams;
   const employeeIdNum = Number(params.get("employee_id"));
   const monthNum = Number(params.get("month"));
@@ -26,6 +29,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<AllowanceR
   const employeeId: number = employeeIdNum;
   const month: number = monthNum;
   const year: number = yearNum;
+  if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
 
   try {
     const employees = await query<RowDataPacket[]>(
