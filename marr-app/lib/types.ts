@@ -67,7 +67,7 @@ export interface WelfareCalculateResult {
   total_return_home: number;
   ot_hours: number; // rounded OT hours behind total_ot
   work_days: number; // days counted for the return-home bonus
-  base_days: number; // days in month - Sundays
+  base_days: number; // days in month - Sundays - TimeMint company holidays
   half_threshold_days: number; // floor(50% of base_days): half bonus from here
   full_threshold_days: number; // floor(80% of base_days): full bonus from here
 }

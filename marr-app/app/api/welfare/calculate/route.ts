@@ -106,6 +106,8 @@ function roundOtHours(minutes: number): number {
   return minutes - whole * 60 >= OT_ROUND_UP_MINUTES ? whole + 1 : whole;
 }
 
+const isSunday = (date: string) => new Date(`${date}T00:00:00`).getDay() === 0;
+
 /** Number of Sundays in the month. */
 function sundayCount(year: number, month: number): number {
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -213,7 +215,7 @@ export async function POST(
     const totalOt = totalOtHours * Number(employee.base_ot_rate);
 
     // Rule 4: Return home bonus, tiered by work days / base days.
-    //   base days = days in month - Sundays (leave days are not deducted)
+    //   base days = days in month - Sundays - TimeMint company holidays (leave days are not deducted)
     //   work days < floor(50% of base)         -> 0
     //   floor(50%) <= work days < floor(80%)   -> half of return_home_rate
     //   work days >= floor(80% of base)        -> full return_home_rate
@@ -228,7 +230,12 @@ export async function POST(
     );
     const days = classifyMonth(yearNum, monthNum, reportRows);
     const workDays = days.filter((d) => d.work_day).length;
-    const baseDays = days.length - sundayCount(yearNum, monthNum);
+    // Company holidays come from the imported attendance_report rows; one falling on a Sunday is
+    // already deducted with the Sundays.
+    const companyHolidays = new Set(
+      reportRows.filter((r) => r.day_type === "company_holiday" && !isSunday(r.date)).map((r) => r.date)
+    );
+    const baseDays = days.length - sundayCount(yearNum, monthNum) - companyHolidays.size;
     const halfThreshold = Math.floor(baseDays * RETURN_HOME_HALF_RATIO + 1e-9);
     const fullThreshold = Math.floor(baseDays * RETURN_HOME_FULL_RATIO + 1e-9);
     const returnHomeRate = Number(employee.return_home_rate);
