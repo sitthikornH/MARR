@@ -67,7 +67,9 @@ export interface WelfareCalculateResult {
   total_return_home: number;
   ot_hours: number; // rounded OT hours behind total_ot
   work_days: number; // days counted for the return-home bonus
-  scheduled_days: number; // scheduled workdays; bonus needs work_days >= 80% of this
+  base_days: number; // days in month - Sundays - vacation/sick/personal leave days
+  half_threshold_days: number; // floor(50% of base_days): half bonus from here
+  full_threshold_days: number; // floor(80% of base_days): full bonus from here
 }
 
 export type SyncStatus = "success" | "error";

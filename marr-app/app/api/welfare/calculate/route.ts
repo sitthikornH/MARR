@@ -10,7 +10,10 @@ const MIN_ALLOWANCE_HOURS = 4; // allowance needs more than 4h from first check-
 const LUNCH_START_HOUR = 12; // 12:00-13:00 lunch break is not counted toward the 4h
 const LUNCH_END_HOUR = 13;
 const OT_ROUND_UP_MINUTES = 20; // per-day OT remainder: < 20 min dropped, >= 20 min rounds up to the next hour
-const RETURN_HOME_THRESHOLD = 0.8; // work days must be >= 80% of scheduled workdays
+const RETURN_HOME_HALF_RATIO = 0.5; // work days >= 50% of base days -> half of return_home_rate
+const RETURN_HOME_FULL_RATIO = 0.8; // work days >= 80% of base days -> full return_home_rate
+// Full-day leave types (attendance.leave_type = TimeMint LeaveTypeEN) left out of the base days.
+const RETURN_HOME_EXCLUDED_LEAVE = /vacation|annual leave|sick|personal/i;
 
 interface EmployeeRow extends RowDataPacket {
   id: number;
@@ -21,6 +24,7 @@ interface EmployeeRow extends RowDataPacket {
 
 interface AttendanceWithFeeRow extends RowDataPacket {
   id: number;
+  date: string;
   time_in: string | null;
   time_out: string | null;
   location_name: string | null;
@@ -105,15 +109,16 @@ function roundOtHours(minutes: number): number {
   return minutes - whole * 60 >= OT_ROUND_UP_MINUTES ? whole + 1 : whole;
 }
 
-/** Number of Mon-Fri days in the month. */
-function weekdayCount(year: number, month: number): number {
+const isSunday = (date: string) => new Date(`${date}T00:00:00`).getDay() === 0;
+
+/** Number of Sundays in the month. */
+function sundayCount(year: number, month: number): number {
   const daysInMonth = new Date(year, month, 0).getDate();
-  let weekdays = 0;
+  let sundays = 0;
   for (let day = 1; day <= daysInMonth; day++) {
-    const dayOfWeek = new Date(year, month - 1, day).getDay();
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) weekdays++;
+    if (new Date(year, month - 1, day).getDay() === 0) sundays++;
   }
-  return weekdays;
+  return sundays;
 }
 
 export async function POST(
@@ -163,7 +168,7 @@ export async function POST(
     const employee = employeeRows[0];
 
     const [attendanceRows] = await connection.execute<AttendanceWithFeeRow[]>(
-      `SELECT a.id, a.time_in, a.time_out, a.location_name, a.leave_type, lr.travel_fee
+      `SELECT a.id, a.date, a.time_in, a.time_out, a.location_name, a.leave_type, lr.travel_fee
        FROM attendance a
        LEFT JOIN location_rates lr ON a.location_name = lr.location_name
        WHERE a.employee_id = ? AND YEAR(a.date) = ? AND MONTH(a.date) = ?`,
@@ -212,9 +217,13 @@ export async function POST(
     }
     const totalOt = totalOtHours * Number(employee.base_ot_rate);
 
-    // Rule 4: Return home bonus - awarded if work days >= 80% of scheduled workdays. Work days are
-    // classified from attendance_report by lib/dayRules.ts (the same rules as the allowance report);
-    // scheduled workdays are the month's imported days that are not holidays in TimeMint.
+    // Rule 4: Return home bonus, tiered by work days / base days.
+    //   base days = days in month - Sundays - full-day vacation, sick and personal leave days
+    //   work days < floor(50% of base)         -> 0
+    //   floor(50%) <= work days < floor(80%)   -> half of return_home_rate
+    //   work days >= floor(80% of base)        -> full return_home_rate
+    // Fractions of a day in the thresholds are dropped. Work days are classified from
+    // attendance_report by lib/dayRules.ts (the same rules as the allowance report).
     const [reportRows] = await connection.execute<DayRuleRowPacket[]>(
       `SELECT date, start_work_at, get_off_work_at, time_in, time_out, notice, place, row_type, day_type, holiday_name
        FROM attendance_report
@@ -224,11 +233,17 @@ export async function POST(
     );
     const days = classifyMonth(yearNum, monthNum, reportRows);
     const workDays = days.filter((d) => d.work_day).length;
-    const scheduledDates = new Set(reportRows.filter((r) => r.day_type === "workday").map((r) => r.date));
-    // Month not imported yet: fall back to Mon-Fri so the threshold is never zero.
-    const scheduledDays = reportRows.length > 0 ? scheduledDates.size : weekdayCount(yearNum, monthNum);
+    const excludedLeaveDates = new Set(
+      attendanceRows
+        .filter((r) => r.leave_type !== null && RETURN_HOME_EXCLUDED_LEAVE.test(r.leave_type) && !isSunday(r.date))
+        .map((r) => r.date)
+    );
+    const baseDays = days.length - sundayCount(yearNum, monthNum) - excludedLeaveDates.size;
+    const halfThreshold = Math.floor(baseDays * RETURN_HOME_HALF_RATIO + 1e-9);
+    const fullThreshold = Math.floor(baseDays * RETURN_HOME_FULL_RATIO + 1e-9);
+    const returnHomeRate = Number(employee.return_home_rate);
     const totalReturnHome =
-      scheduledDays > 0 && workDays / scheduledDays >= RETURN_HOME_THRESHOLD ? Number(employee.return_home_rate) : 0;
+      baseDays <= 0 ? 0 : workDays >= fullThreshold ? returnHomeRate : workDays >= halfThreshold ? returnHomeRate / 2 : 0;
 
     await connection.execute(
       `INSERT INTO welfare_summary
@@ -254,7 +269,9 @@ export async function POST(
       total_return_home: totalReturnHome,
       ot_hours: totalOtHours,
       work_days: workDays,
-      scheduled_days: scheduledDays,
+      base_days: baseDays,
+      half_threshold_days: halfThreshold,
+      full_threshold_days: fullThreshold,
     };
 
     return NextResponse.json(result, { status: 200 });

@@ -82,7 +82,7 @@ export default function WelfareSummaryPage() {
         {
           label: "Return Home",
           value: result.total_return_home,
-          detail: `${result.work_days} / ${result.scheduled_days} work days (need ${Math.ceil(result.scheduled_days * 0.8 - 1e-9)})`,
+          detail: `${result.work_days} / ${result.base_days} work days (half ≥ ${result.half_threshold_days}, full ≥ ${result.full_threshold_days})`,
         },
       ]
     : [];
