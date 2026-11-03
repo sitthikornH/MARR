@@ -228,6 +228,18 @@ function FormView() {
           {inputKeys.length - pendingCount} of {inputKeys.length} rows submitted
           {pendingCount > 0 && <span className="ml-1 text-amber-700">({pendingCount} waiting for input)</span>}
         </p>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          Rate
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+            className="w-20 rounded-md border border-gray-300 px-2 py-1 text-right"
+          />
+          / KM
+        </label>
         <button
           onClick={() => window.print()}
           className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
@@ -269,21 +281,6 @@ function FormView() {
                 ))}
               </tbody>
             </table>
-
-            <p className="border border-gray-800 py-0.5 text-center font-semibold">Mileage - 301</p>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">Rate :</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={rate}
-                onChange={(e) => setRate(e.target.value)}
-                className="w-20 rounded border border-gray-300 px-1 py-0.5 text-right print:hidden"
-              />
-              <span className="hidden print:inline">{money(rateNum)}</span>
-              <span>/ KM</span>
-            </div>
 
             <table className="w-full table-fixed border-collapse">
               {/* Fixed widths for everything but "To", which takes the rest so places show in full. */}
