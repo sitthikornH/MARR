@@ -21,6 +21,13 @@ interface ReportRow extends RowDataPacket {
 
 const LATE_LIMIT_MINUTES = 60;
 const EARLY_CHECKOUT_BEFORE = "13:00:00";
+const MIN_ALLOWANCE_HOURS = 4;
+
+/** 200 -> "3:20 h" */
+function formatDuration(minutes: number): string {
+  const m = Math.floor(minutes);
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h`;
+}
 
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : null);
 
@@ -59,16 +66,20 @@ function buildDay(date: string, rows: ReportRow[]): AllowanceReportDay {
     const earlyCheckOut = lastOut !== undefined && lastOut < EARLY_CHECKOUT_BEFORE;
     const noCheckIn = ins.length === 0 || (!isHoliday && lateCheckIn);
     const noCheckOut = outs.length === 0 || (!isHoliday && earlyCheckOut);
+    // First check-in to last check-out must be more than MIN_ALLOWANCE_HOURS.
+    const workedMinutes = ins.length > 0 && lastOut !== undefined ? minutesOf(lastOut) - minutesOf(ins[0]) : null;
+    const tooShort = !isHoliday && workedMinutes !== null && workedMinutes <= MIN_ALLOWANCE_HOURS * 60;
 
     const notes = [
       holidayNote,
       ...leaves.map((l) => leaveLabel(l.notice)),
       noCheckIn ? "no check-in" : null,
       noCheckOut ? "no check-out" : null,
+      tooShort ? `worked ${formatDuration(Math.max(0, workedMinutes!))} (not more than ${MIN_ALLOWANCE_HOURS} h)` : null,
     ].filter((n): n is string => !!n);
     return {
       date,
-      kind: isHoliday ? "holiday_work" : noCheckIn || noCheckOut ? "uncounted" : "work",
+      kind: isHoliday ? "holiday_work" : noCheckIn || noCheckOut || tooShort ? "uncounted" : "work",
       time,
       site: places.join(", ") || null,
       note: notes.join("; ") || null,

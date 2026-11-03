@@ -124,8 +124,8 @@ export interface AttendanceReportRow {
 
 export type AttendanceDayType = "workday" | "holiday" | "company_holiday";
 
-// uncounted: worked a workday but "no check-in" (missing or >1h late) or "no check-out"
-// (missing or before 13:00), so not counted for allowance
+// uncounted: worked a workday but "no check-in" (missing or >1h late), "no check-out"
+// (missing or before 13:00), or first-in to last-out not more than 4h, so not counted for allowance
 export type AllowanceDayKind = "work" | "uncounted" | "holiday_work" | "leave" | "holiday" | "absence" | "none";
 
 export interface AllowanceReportDay {

@@ -4,6 +4,7 @@ import pool from "@/lib/db";
 import type { ApiError, WelfareCalculateRequest, WelfareCalculateResult } from "@/lib/types";
 
 const STANDARD_HOURS_PER_DAY = 8;
+const MIN_ALLOWANCE_HOURS = 4; // allowance needs more than 4h from first check-in to last check-out
 const OT_ROUND_UP_MINUTES = 20; // per-day OT remainder: < 20 min dropped, >= 20 min rounds up to the next hour
 const RETURN_HOME_THRESHOLD = 0.8; // 80% of standard monthly working hours
 
@@ -157,11 +158,15 @@ export async function POST(
       [employeeId, yearNum, monthNum]
     );
 
-    // Rule 1: Allowance - valid days have both time_in and time_out, and no leave_type.
+    // Rule 1: Allowance - valid days have both time_in and time_out, and no leave_type; a day
+    // only earns allowance if first check-in to last check-out is more than MIN_ALLOWANCE_HOURS.
     const validDays = attendanceRows.filter(
       (row) => row.time_in !== null && row.time_out !== null && row.leave_type === null
     );
-    const totalAllowance = validDays.length * Number(employee.base_allowance);
+    const allowanceDays = validDays.filter(
+      (row) => timeStringToHours(row.time_out as string) - timeStringToHours(row.time_in as string) > MIN_ALLOWANCE_HOURS
+    );
+    const totalAllowance = allowanceDays.length * Number(employee.base_allowance);
 
     // Rule 2: Travel fee - sum travel_fee for every record whose location matches location_rates.
     const totalTravel = attendanceRows.reduce(
