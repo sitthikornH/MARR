@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import type { AllowanceReportDay, MileageEntry, MileageForm, MileageOtherItem } from "@/lib/types";
 
 const DEFAULT_FROM = "ที่พัก";
+const DEFAULT_FIRST_LEG_KM = "30"; // pre-filled KM for each day's first leg (accommodation -> first place)
 const INPUT_KINDS: AllowanceReportDay["kind"][] = ["work", "uncounted", "holiday_work"];
 
 interface Draft {
@@ -98,7 +99,7 @@ function FormView() {
                   time: seq === 1 ? day.time ?? "" : "",
                   from_place: seq === 1 ? DEFAULT_FROM : places[seq - 2] ?? "",
                   to_place: places[seq - 1] ?? "",
-                  km: "",
+                  km: seq === 1 ? DEFAULT_FIRST_LEG_KM : "",
                 };
           }
         }
