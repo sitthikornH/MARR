@@ -66,6 +66,8 @@ export interface WelfareCalculateResult {
   total_ot: number;
   total_return_home: number;
   ot_hours: number; // rounded OT hours behind total_ot
+  work_days: number; // days counted for the return-home bonus
+  scheduled_days: number; // scheduled workdays; bonus needs work_days >= 80% of this
 }
 
 export type SyncStatus = "success" | "error";
@@ -134,6 +136,7 @@ export interface AllowanceReportDay {
   time: string | null; // "08:00-17:00"
   site: string | null; // places, leave type, or "X" for a holiday off
   note: string | null; // holiday name, hourly leave, incomplete check-in/out
+  work_day: boolean; // counts as a work day for the return-home bonus (lib/dayRules.ts)
 }
 
 /** Monthly "Other Income for Allowance" report, built from stored attendance_report rows. */

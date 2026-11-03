@@ -66,6 +66,9 @@ function ReportView() {
   const countLabels = report.days.map((d) =>
     d.kind === "work" ? String(++workCount) : d.kind === "holiday_work" ? `H${++holidayCount}` : null
   );
+  // Work-day number at the right of the Site cell (days counted for the return-home bonus).
+  let workDayCount = 0;
+  const workDayLabels = report.days.map((d) => (d.work_day ? String(++workDayCount) : null));
 
   const remarks = [
     ...report.days
@@ -191,9 +194,14 @@ function ReportView() {
                         </span>
                       )}
                     </td>
-                    <td className={`${cell} text-center`}>
+                    <td className={`${cell} relative pr-6 text-center`}>
                       {d.site ?? ""}
                       {d.kind === "holiday_work" && <span className="ml-1 font-bold">(H)</span>}
+                      {workDayLabels[i] && (
+                        <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] font-semibold">
+                          {workDayLabels[i]}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -203,6 +211,7 @@ function ReportView() {
             <table className="w-full border-collapse">
               <tbody>
                 {[
+                  ["Work Days (Return Home)", String(workDayCount)],
                   ["Total Day", String(totalDays)],
                   ["Site Allowance / Day", money(dayRate)],
                   ["Total Allowance", money(totalAllowance)],

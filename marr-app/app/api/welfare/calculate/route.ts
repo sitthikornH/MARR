@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { RowDataPacket } from "mysql2/promise";
 import pool from "@/lib/db";
+import { classifyMonth, type DayRuleRow } from "@/lib/dayRules";
 import type { ApiError, WelfareCalculateRequest, WelfareCalculateResult } from "@/lib/types";
 
-const STANDARD_HOURS_PER_DAY = 8;
+interface DayRuleRowPacket extends RowDataPacket, DayRuleRow {}
+
 const MIN_ALLOWANCE_HOURS = 4; // allowance needs more than 4h from first check-in to last check-out, excluding lunch
 const LUNCH_START_HOUR = 12; // 12:00-13:00 lunch break is not counted toward the 4h
 const LUNCH_END_HOUR = 13;
 const OT_ROUND_UP_MINUTES = 20; // per-day OT remainder: < 20 min dropped, >= 20 min rounds up to the next hour
-const RETURN_HOME_THRESHOLD = 0.8; // 80% of standard monthly working hours
+const RETURN_HOME_THRESHOLD = 0.8; // work days must be >= 80% of scheduled workdays
 
 interface EmployeeRow extends RowDataPacket {
   id: number;
@@ -103,15 +105,15 @@ function roundOtHours(minutes: number): number {
   return minutes - whole * 60 >= OT_ROUND_UP_MINUTES ? whole + 1 : whole;
 }
 
-/** Standard monthly working hours = 8 hours * number of weekdays (Mon-Fri) in the month. */
-function standardMonthlyHours(year: number, month: number): number {
+/** Number of Mon-Fri days in the month. */
+function weekdayCount(year: number, month: number): number {
   const daysInMonth = new Date(year, month, 0).getDate();
   let weekdays = 0;
   for (let day = 1; day <= daysInMonth; day++) {
     const dayOfWeek = new Date(year, month - 1, day).getDay();
     if (dayOfWeek !== 0 && dayOfWeek !== 6) weekdays++;
   }
-  return weekdays * STANDARD_HOURS_PER_DAY;
+  return weekdays;
 }
 
 export async function POST(
@@ -210,19 +212,23 @@ export async function POST(
     }
     const totalOt = totalOtHours * Number(employee.base_ot_rate);
 
-    let totalWorkedHours = 0;
-    for (const row of validDays) {
-      const inHours = timeStringToHours(row.time_in as string);
-      const outHours = timeStringToHours(row.time_out as string);
-      totalWorkedHours += Math.max(0, outHours - inHours);
-    }
-
-    // Rule 4: Return home bonus - awarded if total worked hours >= 80% of standard monthly hours.
-    const standardHours = standardMonthlyHours(yearNum, monthNum);
+    // Rule 4: Return home bonus - awarded if work days >= 80% of scheduled workdays. Work days are
+    // classified from attendance_report by lib/dayRules.ts (the same rules as the allowance report);
+    // scheduled workdays are the month's imported days that are not holidays in TimeMint.
+    const [reportRows] = await connection.execute<DayRuleRowPacket[]>(
+      `SELECT date, start_work_at, get_off_work_at, time_in, time_out, notice, place, row_type, day_type, holiday_name
+       FROM attendance_report
+       WHERE employee_id = ? AND YEAR(date) = ? AND MONTH(date) = ?
+       ORDER BY date ASC, id ASC`,
+      [employeeId, yearNum, monthNum]
+    );
+    const days = classifyMonth(yearNum, monthNum, reportRows);
+    const workDays = days.filter((d) => d.work_day).length;
+    const scheduledDates = new Set(reportRows.filter((r) => r.day_type === "workday").map((r) => r.date));
+    // Month not imported yet: fall back to Mon-Fri so the threshold is never zero.
+    const scheduledDays = reportRows.length > 0 ? scheduledDates.size : weekdayCount(yearNum, monthNum);
     const totalReturnHome =
-      standardHours > 0 && totalWorkedHours / standardHours >= RETURN_HOME_THRESHOLD
-        ? Number(employee.return_home_rate)
-        : 0;
+      scheduledDays > 0 && workDays / scheduledDays >= RETURN_HOME_THRESHOLD ? Number(employee.return_home_rate) : 0;
 
     await connection.execute(
       `INSERT INTO welfare_summary
@@ -247,6 +253,8 @@ export async function POST(
       total_ot: totalOt,
       total_return_home: totalReturnHome,
       ot_hours: totalOtHours,
+      work_days: workDays,
+      scheduled_days: scheduledDays,
     };
 
     return NextResponse.json(result, { status: 200 });

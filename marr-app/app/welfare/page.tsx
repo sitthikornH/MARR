@@ -79,7 +79,11 @@ export default function WelfareSummaryPage() {
         { label: "Allowance", value: result.total_allowance },
         { label: "Travel", value: result.total_travel },
         { label: "Overtime", value: result.total_ot, detail: `${result.ot_hours} h (approved OT requests)` },
-        { label: "Return Home", value: result.total_return_home },
+        {
+          label: "Return Home",
+          value: result.total_return_home,
+          detail: `${result.work_days} / ${result.scheduled_days} work days (need ${Math.ceil(result.scheduled_days * 0.8 - 1e-9)})`,
+        },
       ]
     : [];
 
