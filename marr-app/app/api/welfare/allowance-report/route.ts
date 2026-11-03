@@ -22,6 +22,14 @@ interface ReportRow extends RowDataPacket {
 const LATE_LIMIT_MINUTES = 60;
 const EARLY_CHECKOUT_BEFORE = "13:00:00";
 const MIN_ALLOWANCE_HOURS = 4;
+const LUNCH_START = 12 * 60;
+const LUNCH_END = 13 * 60;
+
+function minutesExcludingLunch(timeIn: string, timeOut: string): number {
+  const start = minutesOf(timeIn);
+  const end = minutesOf(timeOut);
+  return end - start - Math.max(0, Math.min(end, LUNCH_END) - Math.max(start, LUNCH_START));
+}
 
 /** 200 -> "3:20 h" */
 function formatDuration(minutes: number): string {
@@ -66,8 +74,9 @@ function buildDay(date: string, rows: ReportRow[]): AllowanceReportDay {
     const earlyCheckOut = lastOut !== undefined && lastOut < EARLY_CHECKOUT_BEFORE;
     const noCheckIn = ins.length === 0 || (!isHoliday && lateCheckIn);
     const noCheckOut = outs.length === 0 || (!isHoliday && earlyCheckOut);
-    // First check-in to last check-out must be more than MIN_ALLOWANCE_HOURS.
-    const workedMinutes = ins.length > 0 && lastOut !== undefined ? minutesOf(lastOut) - minutesOf(ins[0]) : null;
+    // First check-in to last check-out, minus the part inside the 12:00-13:00 lunch break, must be
+    // more than MIN_ALLOWANCE_HOURS.
+    const workedMinutes = ins.length > 0 && lastOut !== undefined ? minutesExcludingLunch(ins[0], lastOut) : null;
     const tooShort = !isHoliday && workedMinutes !== null && workedMinutes <= MIN_ALLOWANCE_HOURS * 60;
 
     const notes = [
@@ -75,7 +84,9 @@ function buildDay(date: string, rows: ReportRow[]): AllowanceReportDay {
       ...leaves.map((l) => leaveLabel(l.notice)),
       noCheckIn ? "no check-in" : null,
       noCheckOut ? "no check-out" : null,
-      tooShort ? `worked ${formatDuration(Math.max(0, workedMinutes!))} (not more than ${MIN_ALLOWANCE_HOURS} h)` : null,
+      tooShort
+        ? `worked ${formatDuration(Math.max(0, workedMinutes!))} excl. lunch (not more than ${MIN_ALLOWANCE_HOURS} h)`
+        : null,
     ].filter((n): n is string => !!n);
     return {
       date,

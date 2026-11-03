@@ -4,7 +4,9 @@ import pool from "@/lib/db";
 import type { ApiError, WelfareCalculateRequest, WelfareCalculateResult } from "@/lib/types";
 
 const STANDARD_HOURS_PER_DAY = 8;
-const MIN_ALLOWANCE_HOURS = 4; // allowance needs more than 4h from first check-in to last check-out
+const MIN_ALLOWANCE_HOURS = 4; // allowance needs more than 4h from first check-in to last check-out, excluding lunch
+const LUNCH_START_HOUR = 12; // 12:00-13:00 lunch break is not counted toward the 4h
+const LUNCH_END_HOUR = 13;
 const OT_ROUND_UP_MINUTES = 20; // per-day OT remainder: < 20 min dropped, >= 20 min rounds up to the next hour
 const RETURN_HOME_THRESHOLD = 0.8; // 80% of standard monthly working hours
 
@@ -44,6 +46,14 @@ function timeStringToHours(time: string): number {
 }
 
 const toMinutes = (time: string) => timeStringToHours(time) * 60;
+
+/** Hours from check-in to check-out minus the part that falls inside the 12:00-13:00 lunch break. */
+function hoursExcludingLunch(timeIn: string, timeOut: string): number {
+  const start = timeStringToHours(timeIn);
+  const end = timeStringToHours(timeOut);
+  const lunch = Math.max(0, Math.min(end, LUNCH_END_HOUR) - Math.max(start, LUNCH_START_HOUR));
+  return end - start - lunch;
+}
 
 function mergeIntervals(intervals: Interval[]): Interval[] {
   const sorted = intervals.filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
@@ -164,7 +174,7 @@ export async function POST(
       (row) => row.time_in !== null && row.time_out !== null && row.leave_type === null
     );
     const allowanceDays = validDays.filter(
-      (row) => timeStringToHours(row.time_out as string) - timeStringToHours(row.time_in as string) > MIN_ALLOWANCE_HOURS
+      (row) => hoursExcludingLunch(row.time_in as string, row.time_out as string) > MIN_ALLOWANCE_HOURS
     );
     const totalAllowance = allowanceDays.length * Number(employee.base_allowance);
 
