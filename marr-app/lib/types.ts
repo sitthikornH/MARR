@@ -170,6 +170,53 @@ export interface TimeMintImportResult {
   replaced: number; // existing attendance rows deleted in the range (only when saved)
 }
 
+export interface MileageEntry {
+  date: string;
+  time: string | null;
+  from_place: string | null;
+  to_place: string | null;
+  km: number;
+  site: string | null;
+}
+
+export interface MileageOtherItem {
+  description: string;
+  period: string | null;
+  amount: number;
+}
+
+/** "Other Income for Mileage and Telephone Charge" data for one employee and month. */
+export interface MileageForm {
+  employee_id: number;
+  emp_code: string;
+  employee_name: string;
+  position: string | null;
+  department: string | null;
+  direct_superior: string | null;
+  site: string | null;
+  month: number;
+  year: number;
+  rate_per_km: number;
+  remarks: string | null;
+  days: AllowanceReportDay[]; // day kind, shift time and check-in places (pre-fill for "To")
+  entries: MileageEntry[]; // submitted rows
+  other_items: MileageOtherItem[];
+  imported_days: number;
+}
+
+export interface MileageEntryRequest extends MileageEntry {
+  employee_id: number;
+}
+
+export interface MileageClaimRequest {
+  employee_id: number;
+  month: number;
+  year: number;
+  rate_per_km: number;
+  remarks: string | null;
+  other_items: MileageOtherItem[];
+}
+
 export interface ApiError {
   error: string;
 }

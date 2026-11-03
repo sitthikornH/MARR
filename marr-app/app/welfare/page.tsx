@@ -64,14 +64,14 @@ export default function WelfareSummaryPage() {
     }
   }
 
-  function handleOpenReport() {
+  function handleOpenForm(path: string) {
     setError(null);
     if (!employeeId) {
       setError("Please select an employee.");
       return;
     }
     const params = new URLSearchParams({ employee_id: employeeId, month, year });
-    window.open(`/welfare/allowance-report?${params.toString()}`, "_blank");
+    window.open(`${path}?${params.toString()}`, "_blank");
   }
 
   const resultCards = result
@@ -150,10 +150,16 @@ export default function WelfareSummaryPage() {
             {calculating ? "Calculating..." : "Calculate Welfare"}
           </button>
           <button
-            onClick={handleOpenReport}
+            onClick={() => handleOpenForm("/welfare/allowance-report")}
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
             Allowance Report
+          </button>
+          <button
+            onClick={() => handleOpenForm("/welfare/mileage")}
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            Mileage &amp; Telephone
           </button>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>

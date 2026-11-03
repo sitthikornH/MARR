@@ -98,6 +98,47 @@ CREATE TABLE IF NOT EXISTS overtime_request (
   INDEX idx_overtime_request_employee_date (employee_id, date)
 );
 
+-- "Other Income for Mileage and Telephone Charge" form: one claim per employee per month,
+-- one mileage entry per day (submitted row by row), and free-form other-income lines
+-- (Telephone & Internet, Go back home, ...).
+CREATE TABLE IF NOT EXISTS mileage_claim (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  employee_id INT NOT NULL,
+  month INT NOT NULL,
+  year INT NOT NULL,
+  rate_per_km DECIMAL(10,2) NOT NULL DEFAULT 5.00,
+  remarks TEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_mileage_claim_employee FOREIGN KEY (employee_id)
+    REFERENCES employees(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_mileage_claim_employee_month_year (employee_id, month, year)
+);
+
+CREATE TABLE IF NOT EXISTS mileage_entry (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  claim_id INT NOT NULL,
+  date DATE NOT NULL,
+  time VARCHAR(20) NULL,
+  from_place VARCHAR(255) NULL,
+  to_place VARCHAR(255) NULL,
+  km DECIMAL(10,2) NOT NULL DEFAULT 0,
+  site VARCHAR(100) NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_mileage_entry_claim FOREIGN KEY (claim_id)
+    REFERENCES mileage_claim(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_mileage_entry_claim_date (claim_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS mileage_other_item (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  claim_id INT NOT NULL,
+  description VARCHAR(255) NOT NULL,
+  period VARCHAR(50) NULL,
+  amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+  CONSTRAINT fk_mileage_other_item_claim FOREIGN KEY (claim_id)
+    REFERENCES mileage_claim(id) ON DELETE CASCADE
+);
+
 -- Upgrade for databases whose attendance_report predates the columns above
 -- (run once; MySQL errors if a column already exists, which is safe to ignore):
 -- ALTER TABLE attendance_report
