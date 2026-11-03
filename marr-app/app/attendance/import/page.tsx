@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import type { Employee, TimeMintImportResult } from "@/lib/types";
+import ImportAllCard from "./ImportAllCard";
 
 function today(): string {
   const d = new Date();
@@ -102,12 +103,14 @@ export default function AttendanceImportPage() {
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Import from TimeMint</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Fetch an employee&apos;s check-ins and approved leaves for a date range, review them, then save them as
-          attendance records for the welfare calculation.
+          Import every employee for a month at once, or review one employee for any date range before saving.
         </p>
       </div>
 
+      <ImportAllCard />
+
       <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 className="text-base font-semibold text-gray-900 mb-4">One employee — preview first</h2>
         <form onSubmit={handleFetch} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-600">Employee</label>

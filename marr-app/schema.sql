@@ -186,7 +186,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
   sync_interval_minutes INT NOT NULL DEFAULT 60,
   last_sync_at DATETIME NULL,
   last_sync_status VARCHAR(20) NULL,
-  last_sync_message VARCHAR(500) NULL
+  last_sync_message VARCHAR(500) NULL,
+  -- automatic company-wide attendance import (lib/companyImport.ts)
+  auto_import_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  import_interval_minutes INT NOT NULL DEFAULT 1440,
+  last_import_at DATETIME NULL,
+  last_import_status VARCHAR(20) NULL,
+  last_import_message VARCHAR(500) NULL
 );
+-- Upgrade: ALTER TABLE app_settings ADD COLUMN auto_import_enabled TINYINT(1) NOT NULL DEFAULT 0,
+--   ADD COLUMN import_interval_minutes INT NOT NULL DEFAULT 1440, ADD COLUMN last_import_at DATETIME NULL,
+--   ADD COLUMN last_import_status VARCHAR(20) NULL, ADD COLUMN last_import_message VARCHAR(500) NULL;
 
 INSERT IGNORE INTO app_settings (id) VALUES (1);

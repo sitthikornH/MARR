@@ -128,84 +128,106 @@ export function daysBetween(start: string, end: string): number {
   return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000);
 }
 
-/** Calls a per-employee, date-ranged endpoint in windows of `maxDays` and concatenates `listKey` from each response. */
+/** One employee (GetByID) or the whole company in one call per window (GetByCom). */
+export type Scope = { empId: string } | "company";
+
+const scopeParam = (scope: Scope) => (scope === "company" ? { Service: "GetByCom" } : { Service: "GetByID", EmpID: scope.empId });
+
+/** Results keyed by EmpID. */
+export type ByEmployee<T> = Map<string, T[]>;
+
+function addTo<T>(map: ByEmployee<T>, empId: string, items: T[]) {
+  map.set(empId, [...(map.get(empId) ?? []), ...items]);
+}
+
+/**
+ * Calls a date-ranged endpoint in windows of `maxDays` and groups `listKey` of each employee in
+ * the response by EmpID.
+ */
 async function fetchRanged<T>(
   service: TokenService,
   name: string,
   listKey: string,
-  empId: string,
+  scope: Scope,
   dateStart: string,
   dateEnd: string,
   maxDays: number,
   extraParam: object = {}
-): Promise<T[]> {
-  const items: T[] = [];
+): Promise<ByEmployee<T>> {
+  const byEmp: ByEmployee<T> = new Map();
   for (let chunkStart = dateStart; chunkStart <= dateEnd; chunkStart = addDays(chunkStart, maxDays)) {
     const chunkEnd = [addDays(chunkStart, maxDays - 1), dateEnd].sort()[0];
     const token = await getToken(service);
     const message = await callTimeMint<Record<string, unknown>[]>(
-      { name, param: { Service: "GetByID", EmpID: empId, DateStart: chunkStart, DateEnd: chunkEnd, ...extraParam } },
+      { name, param: { ...scopeParam(scope), DateStart: chunkStart, DateEnd: chunkEnd, ...extraParam } },
       token
     );
-    for (const emp of message) items.push(...((emp[listKey] as T[] | undefined) ?? []));
+    for (const emp of message) addTo(byEmp, String(emp.EmpID), (emp[listKey] as T[] | undefined) ?? []);
   }
-  return items;
+  return byEmp;
 }
 
-const dedupeBy = <T>(items: T[], key: (t: T) => string): T[] => [...new Map(items.map((i) => [key(i), i])).values()];
+function dedupeEach<T>(byEmp: ByEmployee<T>, key: (t: T) => string): ByEmployee<T> {
+  return new Map([...byEmp].map(([emp, items]) => [emp, [...new Map(items.map((i) => [key(i), i])).values()]]));
+}
+
+/** For one employee: their list from a per-employee result. */
+export const forEmployee = <T>(byEmp: ByEmployee<T>, empId: string): T[] => byEmp.get(empId) ?? [];
+
+export async function fetchProfiles(scope: Scope): Promise<Map<string, TimeMintEmployeeProfile>> {
+  const token = await getToken("Employee");
+  const message = await callTimeMint<TimeMintEmployeeProfile[]>({ name: "GetEmpData", param: scopeParam(scope) }, token);
+  return new Map(message.map((p) => [p.EmpID, p]));
+}
 
 export async function fetchEmployeeProfile(empId: string): Promise<TimeMintEmployeeProfile | null> {
-  const token = await getToken("Employee");
-  const message = await callTimeMint<TimeMintEmployeeProfile[]>(
-    { name: "GetEmpData", param: { Service: "GetByID", EmpID: empId } },
-    token
-  );
-  return message[0] ?? null;
+  return (await fetchProfiles({ empId })).get(empId) ?? null;
 }
 
-export async function fetchCheckLogs(empId: string, dateStart: string, dateEnd: string): Promise<TimeMintCheckLog[]> {
-  return fetchRanged<TimeMintCheckLog>("CheckLog", "GetCheckLogData", "CheckLogData", empId, dateStart, dateEnd, CHECKLOG_MAX_RANGE_DAYS);
+export function fetchCheckLogs(scope: Scope, dateStart: string, dateEnd: string): Promise<ByEmployee<TimeMintCheckLog>> {
+  return fetchRanged("CheckLog", "GetCheckLogData", "CheckLogData", scope, dateStart, dateEnd, CHECKLOG_MAX_RANGE_DAYS);
 }
 
 /** Approved, active leave records. A leave spanning two windows is returned twice, so dedupe by LeaveID. */
-export async function fetchApprovedLeaves(empId: string, dateStart: string, dateEnd: string): Promise<TimeMintLeave[]> {
-  const leaves = await fetchRanged<TimeMintLeave>("Leave", "GetLeaveData", "LeaveData", empId, dateStart, dateEnd, CHUNK_MAX_RANGE_DAYS, {
+export async function fetchApprovedLeaves(scope: Scope, dateStart: string, dateEnd: string): Promise<ByEmployee<TimeMintLeave>> {
+  const leaves = await fetchRanged<TimeMintLeave>("Leave", "GetLeaveData", "LeaveData", scope, dateStart, dateEnd, CHUNK_MAX_RANGE_DAYS, {
     RecordStatus: "APPROVE",
     ActiveStatus: "ACTIVE",
   });
-  return dedupeBy(leaves, (l) => l.LeaveID);
+  return dedupeEach(leaves, (l) => l.LeaveID);
 }
 
 /** Approved and pending overtime requests (the report's "Overtime request history"). */
-export async function fetchOvertimes(empId: string, dateStart: string, dateEnd: string): Promise<TimeMintOvertime[]> {
-  const overtimes = await fetchRanged<TimeMintOvertime>("Overtime", "GetOvertimeData", "OverTimeData", empId, dateStart, dateEnd, CHUNK_MAX_RANGE_DAYS, {
+export async function fetchOvertimes(scope: Scope, dateStart: string, dateEnd: string): Promise<ByEmployee<TimeMintOvertime>> {
+  const overtimes = await fetchRanged<TimeMintOvertime>("Overtime", "GetOvertimeData", "OverTimeData", scope, dateStart, dateEnd, CHUNK_MAX_RANGE_DAYS, {
     RecordStatus: "ALL",
   });
-  return dedupeBy(overtimes, (o) => o.OvertimeID);
+  return dedupeEach(overtimes, (o) => o.OvertimeID);
 }
 
-export async function fetchShifts(empId: string, dateStart: string, dateEnd: string): Promise<TimeMintShift[]> {
-  return fetchRanged<TimeMintShift>("Shift", "GetShiftData", "ShiftData", empId, dateStart, dateEnd, CHUNK_MAX_RANGE_DAYS);
+export function fetchShifts(scope: Scope, dateStart: string, dateEnd: string): Promise<ByEmployee<TimeMintShift>> {
+  return fetchRanged("Shift", "GetShiftData", "ShiftData", scope, dateStart, dateEnd, CHUNK_MAX_RANGE_DAYS);
 }
 
-export async function fetchWeeklyHolidays(empId: string, dateStart: string, dateEnd: string): Promise<TimeMintDatedHoliday[]> {
-  return fetchRanged<TimeMintDatedHoliday>("Holiday", "GetHolidayData", "EmpHoliday", empId, dateStart, dateEnd, CHUNK_MAX_RANGE_DAYS);
+export function fetchWeeklyHolidays(scope: Scope, dateStart: string, dateEnd: string): Promise<ByEmployee<TimeMintDatedHoliday>> {
+  return fetchRanged("Holiday", "GetHolidayData", "EmpHoliday", scope, dateStart, dateEnd, CHUNK_MAX_RANGE_DAYS);
 }
 
 /** Annual (company) holidays for every calendar year the range touches. */
-export async function fetchAnnualHolidays(empId: string, dateStart: string, dateEnd: string): Promise<TimeMintDatedHoliday[]> {
-  const holidays: TimeMintDatedHoliday[] = [];
+export async function fetchAnnualHolidays(scope: Scope, dateStart: string, dateEnd: string): Promise<ByEmployee<TimeMintDatedHoliday>> {
+  const byEmp: ByEmployee<TimeMintDatedHoliday> = new Map();
   for (let year = Number(dateStart.slice(0, 4)); year <= Number(dateEnd.slice(0, 4)); year++) {
     const token = await getToken("Holiday");
     const message = await callTimeMint<Record<string, unknown> | Record<string, unknown>[]>(
-      { name: "GetAnnualHolidayData", param: { Service: "GetByID", EmpID: empId, Year: String(year) } },
+      { name: "GetAnnualHolidayData", param: { ...scopeParam(scope), Year: String(year) } },
       token
     );
-    // The docs show `message` as a single object holding `HolidayData`; accept an array too.
+    // For one employee the docs show `message` as a single object; the company call returns an array.
     for (const entry of Array.isArray(message) ? message : [message]) {
-      holidays.push(...(((entry.HolidayData ?? entry.Holiday) as TimeMintDatedHoliday[] | undefined) ?? []));
+      const holidays = ((entry.HolidayData ?? entry.Holiday) as TimeMintDatedHoliday[] | undefined) ?? [];
+      addTo(byEmp, String(entry.EmpID), holidays.filter((h) => h.Date >= dateStart && h.Date <= dateEnd));
     }
   }
-  return holidays.filter((h) => h.Date >= dateStart && h.Date <= dateEnd);
+  return byEmp;
 }
 

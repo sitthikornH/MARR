@@ -1,42 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import pool, { query, type ResultSetHeader, type RowDataPacket } from "@/lib/db";
-import { buildAttendanceReport } from "@/lib/attendanceReport";
-import {
-  CHECKLOG_MAX_RANGE_DAYS,
-  daysBetween,
-  fetchAnnualHolidays,
-  fetchApprovedLeaves,
-  fetchCheckLogs,
-  fetchEmployeeProfile,
-  fetchOvertimes,
-  fetchShifts,
-  fetchWeeklyHolidays,
-} from "@/lib/timemint";
+import pool, { query, type RowDataPacket } from "@/lib/db";
+import { buildForEmployee, fetchSources, saveEmployeeImport } from "@/lib/companyImport";
+import { CHECKLOG_MAX_RANGE_DAYS, daysBetween, forEmployee } from "@/lib/timemint";
 import type { ApiError, TimeMintImportRequest, TimeMintImportResult } from "@/lib/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function localToday(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-/** Runs an optional source; on failure records a warning and returns the fallback instead of failing the import. */
-async function optional<T>(label: string, fallback: T, warnings: string[], run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (error) {
-    warnings.push(`${label} could not be fetched (${error instanceof Error ? error.message : String(error)})`);
-    return fallback;
-  }
-}
-
 /**
- * Fetches an employee's TimeMint data for a date range and builds (a) attendance-report rows in
+ * Fetches one employee's TimeMint data for a date range and builds (a) attendance-report rows in
  * the layout of TimeMint's report export and (b) one daily attendance row per worked/leave day for
  * the welfare calculation. With save=true both are written, replacing that employee's existing
- * rows in the range.
+ * rows in the range. The company-wide import is /api/timemint/attendance/all.
  */
 export async function POST(request: NextRequest): Promise<NextResponse<TimeMintImportResult | ApiError>> {
   const gate = await requireAuth(request, { admin: true });
@@ -77,37 +52,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<TimeMintI
     }
     const empCode: string = employees[0].emp_code;
 
-    // Check-ins and leaves are required; the rest only enrich the report, so their failure
-    // (e.g. the API key lacks that topic) becomes a warning.
-    const warnings: string[] = [];
-    const checkLogs = await fetchCheckLogs(empCode, dateStart, dateEnd);
-    const leaves = await fetchApprovedLeaves(empCode, dateStart, dateEnd);
-    const profile = await optional("Employee profile", null, warnings, () => fetchEmployeeProfile(empCode));
-    const warningsBeforeOvertime = warnings.length;
-    const overtimes = await optional("Overtime requests", [], warnings, () => fetchOvertimes(empCode, dateStart, dateEnd));
-    const overtimesFetched = warnings.length === warningsBeforeOvertime;
-    const shifts = await optional("Shifts", [], warnings, () => fetchShifts(empCode, dateStart, dateEnd));
-    const weeklyHolidays = await optional("Weekly holidays", [], warnings, () =>
-      fetchWeeklyHolidays(empCode, dateStart, dateEnd)
-    );
-    const annualHolidays = await optional("Annual holidays", [], warnings, () =>
-      fetchAnnualHolidays(empCode, dateStart, dateEnd)
-    );
-
-    const built = buildAttendanceReport({
-      empCode,
-      profile,
-      checkLogs,
-      leaves,
-      overtimes,
-      shifts,
-      weeklyHolidays,
-      annualHolidays,
-      dateStart,
-      dateEnd,
-      today: localToday(),
-    });
-    warnings.push(...built.warnings);
+    const sources = await fetchSources({ empId: empCode }, dateStart, dateEnd);
+    const built = buildForEmployee(sources, empCode, dateStart, dateEnd);
+    const warnings = [...sources.warnings, ...built.warnings];
 
     const knownLocations = await query<RowDataPacket[]>("SELECT location_name FROM location_rates");
     const known = new Set(knownLocations.map((r) => r.location_name as string));
@@ -132,90 +79,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<TimeMintI
       const connection = await pool.getConnection();
       try {
         await connection.beginTransaction();
-
-        await connection.execute("DELETE FROM attendance_report WHERE employee_id = ? AND date BETWEEN ? AND ?", [
+        result.replaced = await saveEmployeeImport(
+          connection,
           employeeId,
           dateStart,
           dateEnd,
-        ]);
-        for (const row of built.rows) {
-          await connection.execute(
-            `INSERT INTO attendance_report
-               (employee_id, emp_code, employee_name, position, date, start_work_at, get_off_work_at,
-                time_in, time_out, notice, overtime_request_history, place, row_type, checklog_id,
-                day_type, holiday_name, department, approver_code)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              employeeId,
-              row.emp_code,
-              row.employee_name,
-              row.position,
-              row.date,
-              row.start_work_at,
-              row.get_off_work_at,
-              row.time_in,
-              row.time_out,
-              row.notice,
-              row.overtime_request_history,
-              row.place,
-              row.row_type,
-              row.checklog_id,
-              row.day_type,
-              row.holiday_name,
-              row.department,
-              row.approver_code,
-            ]
-          );
-        }
-
-        // OT requests feed the welfare OT formula. Only replace them when the fetch succeeded,
-        // so a missing API topic doesn't wipe previously imported requests.
-        if (overtimesFetched) {
-          await connection.execute("DELETE FROM overtime_request WHERE employee_id = ? AND date BETWEEN ? AND ?", [
-            employeeId,
-            dateStart,
-            dateEnd,
-          ]);
-          for (const ot of overtimes) {
-            if (ot.OvertimeDate < dateStart || ot.OvertimeDate > dateEnd) continue;
-            await connection.execute(
-              `INSERT INTO overtime_request
-                 (employee_id, overtime_id, date, time_start, time_end, minutes, overtime_type, day_type, reason, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON DUPLICATE KEY UPDATE
-                 employee_id = VALUES(employee_id), date = VALUES(date), time_start = VALUES(time_start),
-                 time_end = VALUES(time_end), minutes = VALUES(minutes), overtime_type = VALUES(overtime_type),
-                 day_type = VALUES(day_type), reason = VALUES(reason), status = VALUES(status)`,
-              [
-                employeeId,
-                ot.OvertimeID,
-                ot.OvertimeDate,
-                ot.OvertimeTimeStart,
-                ot.OvertimeTimeEnd,
-                Number(ot.OvertimeMinutes) || 0,
-                ot.OvertimeType || null,
-                ot.OvertimeDayType || null,
-                ot.OvertimeReason ? ot.OvertimeReason.slice(0, 500) : null,
-                (ot.OvertimeRecordStatus || "").slice(0, 20),
-              ]
-            );
-          }
-        }
-
-        const [deleted] = await connection.execute<ResultSetHeader>(
-          "DELETE FROM attendance WHERE employee_id = ? AND date BETWEEN ? AND ?",
-          [employeeId, dateStart, dateEnd]
+          built,
+          forEmployee(sources.overtimes, empCode),
+          sources.overtimesFetched
         );
-        for (const day of built.days) {
-          await connection.execute(
-            "INSERT INTO attendance (employee_id, date, time_in, time_out, location_name, leave_type) VALUES (?, ?, ?, ?, ?, ?)",
-            [employeeId, day.date, day.time_in, day.time_out, day.location_name, day.leave_type]
-          );
-        }
-
         await connection.commit();
         result.saved = true;
-        result.replaced = deleted.affectedRows;
       } catch (error) {
         await connection.rollback();
         throw error;

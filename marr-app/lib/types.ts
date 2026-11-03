@@ -89,9 +89,18 @@ export interface AppSettings {
   last_sync_at: string | null;
   last_sync_status: SyncStatus | null;
   last_sync_message: string | null;
+  // automatic company-wide attendance import (lib/companyImport.ts)
+  auto_import_enabled: boolean;
+  import_interval_minutes: number;
+  last_import_at: string | null;
+  last_import_status: SyncStatus | null;
+  last_import_message: string | null;
 }
 
-export type AppSettingsUpdate = Pick<AppSettings, "auto_sync_enabled" | "sync_interval_minutes">;
+/** Either group may be sent on its own. */
+export type AppSettingsUpdate = Partial<
+  Pick<AppSettings, "auto_sync_enabled" | "sync_interval_minutes" | "auto_import_enabled" | "import_interval_minutes">
+>;
 
 export interface EmployeeSyncResult {
   fetched: number;
@@ -243,6 +252,27 @@ export interface AuthUser {
   employee_id: number | null; // null for admin-only accounts
   employee_name: string | null;
   must_change_password: boolean;
+}
+
+export interface CompanyImportEmployee {
+  employee_id: number;
+  emp_code: string;
+  name: string;
+  report_rows: number;
+  days: number; // daily attendance rows (welfare calculation)
+  overtime_requests: number;
+  warnings: string[];
+}
+
+/** Result of importing every employee's attendance with TimeMint GetByCom calls. */
+export interface CompanyImportResult {
+  date_start: string;
+  date_end: string;
+  employees: CompanyImportEmployee[];
+  not_in_timemint: string[]; // MARR emp_codes TimeMint returned nothing for
+  not_in_marr: string[]; // TimeMint EmpIDs with no MARR employee (run the employee sync)
+  warnings: string[]; // optional sources that failed
+  seconds: number;
 }
 
 export interface ApiError {

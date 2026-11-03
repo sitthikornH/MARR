@@ -85,6 +85,18 @@ TimeMint calls are all `POST` of `{ name, param }` to one base URL, and the body
 
 The TimeMint client (`callTimeMint`, `getToken`, and the `fetch*` helpers) lives in `lib/timemint.ts` and has no DB access. TimeMint tokens are JWTs of (issued-at second, company, member) with no service in them and are stored under a unique constraint, so two token requests in the same second fail with `Duplicate entry ... for key 'token'`; `getToken` serializes requests and spaces them >1.1s apart.
 
+### Company-wide import (all employees in one go)
+
+Every TimeMint fetcher in `lib/timemint.ts` takes a `Scope`: `{ empId }` (`Service: "GetByID"`) or `"company"` (`Service: "GetByCom"`). Each returns results keyed by EmpID (`ByEmployee<T>`, read with `forEmployee()`). `lib/companyImport.ts` (imports lib/db, like employeeSync) holds the shared import pipeline:
+- `fetchSources(scope, start, end)`: the 7 APIs, with check-logs and leaves required and the rest optional.
+- `buildForEmployee()`: builds one employee's rows from the fetched sources.
+- `saveEmployeeImport()`: replaces one employee's `attendance_report` / `overtime_request` / `attendance` rows on a given connection.
+- `runCompanyImport(start, end)`: one GetByCom call per API, then all MARR employees saved in one transaction. It records the outcome in `app_settings.last_import_*`.
+
+`POST /api/timemint/attendance/all { month, year }` (admin) runs it for a calendar month; a month takes ~16s, mostly the >1.1s token spacing. It's on the Import page ("All employees — one month") and Settings ("Import this month now"). With `auto_import_enabled`, `lib/syncScheduler.ts` runs it every `import_interval_minutes` for the current month, plus the previous month during days 1–5, after the employee sync. TimeMint employees missing from MARR are reported (`not_in_marr`: run the sync first), and MARR employees TimeMint doesn't return are skipped. Per-call limits: Leave/OT/Shift/Holiday allow 100 employees and 31 days; CheckLog allows 10,000 person-days and 90 days. Past 100 employees, split by group (GetByGroup); that isn't implemented yet.
+
+TimeMint's Report API (`GetReportData`) only lists report files already generated in TimeMint (it can't create one), and the Excel (ALPHA) export lacks OT approval status, leave unit, department and approver, so it isn't used.
+
 ### Attendance import from TimeMint (`/attendance/import`)
 
 Pick an employee and a date range (max 90 days, the CheckLog limit; Leave, Overtime, weekly Holiday and Shift requests are chunked into 31-day windows, annual holidays are fetched per year). `POST /api/timemint/attendance` with `save: false` returns a preview; `save: true` replaces that employee's rows in the range in **two** tables in one transaction:

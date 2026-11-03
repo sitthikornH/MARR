@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AppSettings, EmployeeSyncResult } from "@/lib/types";
+import AutoImportSection from "./AutoImportSection";
 
 const INTERVAL_LABELS: { value: number; label: string }[] = [
   { value: 15, label: "Every 15 minutes" },
@@ -77,7 +78,7 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error(data.error || "Sync failed");
       const result = data as EmployeeSyncResult;
       setSyncMessage(
-        `Fetched ${result.fetched}: ${result.inserted} new, ${result.updated} updated, ${result.skipped} unchanged, ${result.ignored} ignored.`
+        `Fetched ${result.fetched}: ${result.inserted} new, ${result.updated} updated, ${result.skipped} unchanged, ${result.ignored} ignored, ${result.accounts_created} login account(s) created.`
       );
     } catch (err) {
       setSyncMessage(err instanceof Error ? err.message : "Something went wrong");
@@ -177,6 +178,10 @@ export default function SettingsPage() {
           </>
         )}
       </section>
+
+      {settings && (
+        <AutoImportSection settings={settings} intervals={INTERVAL_LABELS} onSaved={applySettings} onReload={loadSettings} />
+      )}
     </div>
   );
 }
