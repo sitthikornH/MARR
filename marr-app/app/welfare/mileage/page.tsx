@@ -200,6 +200,13 @@ function FormView() {
   const inputKeys = Object.keys(drafts);
   const pendingCount = inputKeys.filter((k) => !submitted[k] || !sameDraft(drafts[k], toDraft(submitted[k]))).length;
 
+  // Submitted km totalled per destination ("To"), in order of first appearance in the month.
+  const kmByDestination = new Map<string, number>();
+  for (const e of Object.values(submitted).sort((a, b) => a.date.localeCompare(b.date) || a.seq - b.seq)) {
+    const to = e.to_place?.trim() || "(no destination)";
+    kmByDestination.set(to, (kmByDestination.get(to) ?? 0) + e.km);
+  }
+
   const autoRemarks = [
     ...form.days.filter((d) => d.kind === "leave").map((d) => `${longDate(d.date)} : ${d.site}`),
     ...form.days.filter((d) => d.kind === "holiday_work").map((d) => `${longDate(d.date)} : Worked on holiday${d.note ? ` (${d.note})` : ""}`),
@@ -552,7 +559,12 @@ function FormView() {
                     {r}
                   </li>
                 ))}
-                <li className="border-b border-dotted border-gray-800 pb-0.5">
+                {[...kmByDestination].map(([to, km]) => (
+                  <li key={to} className="border-b border-dotted border-gray-800 pb-0.5">
+                    {to} : {money(km)} km × {money(rateNum)} = {money(km * rateNum)}
+                  </li>
+                ))}
+                <li className="border-b border-dotted border-gray-800 pb-0.5 font-semibold">
                   KM {money(totalKm)} × {money(rateNum)} = {money(totalMileage)}
                 </li>
                 <li className="border-b border-dotted border-gray-800 pb-0.5">
