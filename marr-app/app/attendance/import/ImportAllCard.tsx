@@ -82,6 +82,9 @@ export default function ImportAllCard() {
         <div className="space-y-3 text-sm">
           <p className="text-green-700">
             Saved {result.employees.length} employee(s) for {result.date_start} – {result.date_end} in {result.seconds}s.
+            {" "}Time adjustment requests: {result.time_adjustments.records_saved} saved from{" "}
+            {result.time_adjustments.reports_read} report file(s)
+            {result.time_adjustments.records_skipped > 0 && `, ${result.time_adjustments.records_skipped} skipped`}.
           </p>
           {result.not_in_marr.length > 0 && (
             <p className="text-amber-700">

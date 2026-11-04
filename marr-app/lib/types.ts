@@ -272,7 +272,15 @@ export interface CompanyImportResult {
   not_in_timemint: string[]; // MARR emp_codes TimeMint returned nothing for
   not_in_marr: string[]; // TimeMint EmpIDs with no MARR employee (run the employee sync)
   warnings: string[]; // optional sources that failed
+  time_adjustments: TimeAdjustmentImport;
   seconds: number;
+}
+
+/** What the import took from TimeMint's "Time Adjustment Request" report files. */
+export interface TimeAdjustmentImport {
+  reports_read: number;
+  records_saved: number;
+  records_skipped: number; // employee not in MARR, or the row had no record no / date
 }
 
 export interface LeaveDays {

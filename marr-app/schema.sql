@@ -98,6 +98,35 @@ CREATE TABLE IF NOT EXISTS overtime_request (
   INDEX idx_overtime_request_employee_date (employee_id, date)
 );
 
+-- Time adjustment request history, from TimeMint's "Time Adjustment Request" report files (TimeMint
+-- has no API for these records). Same columns as the report; upserted on record_no, never deleted.
+CREATE TABLE IF NOT EXISTS time_adjustment_request (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  employee_id INT NOT NULL,
+  record_no VARCHAR(50) NOT NULL,
+  emp_code VARCHAR(255) NOT NULL,
+  employee_name VARCHAR(255) NULL,
+  position VARCHAR(255) NULL,
+  employee_group VARCHAR(255) NULL,
+  date DATE NOT NULL,
+  from_time_in VARCHAR(8) NULL,
+  from_time_out VARCHAR(8) NULL,
+  to_time_in VARCHAR(8) NULL,
+  to_time_out VARCHAR(8) NULL,
+  reason VARCHAR(1000) NULL,
+  place VARCHAR(255) NULL,
+  added_by VARCHAR(255) NULL,
+  created_date VARCHAR(30) NULL,
+  status VARCHAR(50) NULL,
+  image_url VARCHAR(1000) NULL,
+  source_report_id VARCHAR(50) NULL,
+  imported_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_time_adjustment_employee FOREIGN KEY (employee_id)
+    REFERENCES employees(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_time_adjustment_record_no (record_no),
+  INDEX idx_time_adjustment_employee_date (employee_id, date)
+);
+
 -- "Other Income for Mileage and Telephone Charge" form: one claim per employee per month,
 -- one mileage entry per day (submitted row by row), and free-form other-income lines
 -- (Telephone & Internet, Go back home, ...).

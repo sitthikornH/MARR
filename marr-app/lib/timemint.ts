@@ -8,7 +8,7 @@ interface TimeMintResponse<T> {
   data?: string;
 }
 
-export type TokenService = "Employee" | "CheckLog" | "Leave" | "Overtime" | "Shift" | "Holiday";
+export type TokenService = "Employee" | "CheckLog" | "Leave" | "Overtime" | "Shift" | "Holiday" | "Report";
 
 export async function callTimeMint<T>(body: { name: string; param: object }, token?: string): Promise<T> {
   const baseUrl = process.env.TIMEMINT_API_URL || "https://api.timemint.co/";
@@ -211,6 +211,43 @@ export function fetchShifts(scope: Scope, dateStart: string, dateEnd: string): P
 
 export function fetchWeeklyHolidays(scope: Scope, dateStart: string, dateEnd: string): Promise<ByEmployee<TimeMintDatedHoliday>> {
   return fetchRanged("Holiday", "GetHolidayData", "EmpHoliday", scope, dateStart, dateEnd, CHUNK_MAX_RANGE_DAYS);
+}
+
+export interface TimeMintReportFile {
+  ID: string;
+  DATESTART: string;
+  DATEEND: string;
+  PATH: string | null;
+  STATUS_CODE: string | number;
+  ADD: string;
+}
+
+const REPORT_FILE_HOST = "report.timemint.co";
+const REPORT_FILE_MAX_BYTES = 20 * 1024 * 1024;
+
+/**
+ * "Time Adjustment Request" report files already generated in TimeMint. TimeMint has no API that
+ * returns these records and the Report API can't create a report, so someone has to generate it in
+ * TimeMint (or set up an AutoReport).
+ */
+export async function fetchTimeAdjustmentReports(): Promise<TimeMintReportFile[]> {
+  const token = await getToken("Report");
+  return callTimeMint<TimeMintReportFile[]>(
+    { name: "GetReportData", param: { Service: "GetReportData", Filter: { TYPE: "Time Adjustment Request" } } },
+    token
+  );
+}
+
+export async function downloadReportFile(fileUrl: string): Promise<Buffer> {
+  const url = new URL(fileUrl);
+  if (url.protocol !== "https:" || url.hostname !== REPORT_FILE_HOST) {
+    throw new Error(`Unexpected report file location: ${url.hostname}`);
+  }
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Report file download failed: HTTP ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > REPORT_FILE_MAX_BYTES) throw new Error("Report file is too large");
+  return buf;
 }
 
 /** Annual (company) holidays for every calendar year the range touches. */

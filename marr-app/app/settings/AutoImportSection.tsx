@@ -58,7 +58,11 @@ export default function AutoImportSection({ settings, intervals, onSaved, onRelo
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Import failed");
       const r = data as CompanyImportResult;
-      setMessage(`Imported ${r.employees.length} employee(s) for ${r.date_start} – ${r.date_end} in ${r.seconds}s.`);
+      setMessage(
+        `Imported ${r.employees.length} employee(s) for ${r.date_start} – ${r.date_end} in ${r.seconds}s, ` +
+          `${r.time_adjustments.records_saved} time adjustment request(s).` +
+          (r.warnings.length ? ` ${r.warnings.join(" ")}` : "")
+      );
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -74,6 +78,11 @@ export default function AutoImportSection({ settings, intervals, onSaved, onRelo
         <p className="mt-1 text-sm text-gray-500">
           Imports the current month for every employee from TimeMint in one go. During the first 5 days of a month
           the previous month is imported again too, to pick up late approvals. Runs after the employee sync.
+        </p>
+        <p className="mt-1 text-sm text-gray-500">
+          Time adjustment requests are also saved, from &quot;Time Adjustment Request&quot; report files already
+          generated in TimeMint. TimeMint has no API that creates them, so generate the report for all employees
+          there or set up an AutoReport.
         </p>
       </div>
 
