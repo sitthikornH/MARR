@@ -126,6 +126,14 @@ The "TimeMint" button on Welfare Summary opens `/welfare/timemint?employee_id=&m
 
 A ยอดรวม row follows, then "วันทำงานตาม TimeMint = days with check-logs" and the time the report was produced. Rows use the same highlight colours as the other forms.
 
+### OT & Work on holiday form (`/welfare/ot`)
+
+The "OT & Work on holiday" button on Welfare Summary opens `/welfare/ot?employee_id=&month=&year=`, the company's OVER TIME form (sample: `ฟอร์มเอกสาร/OVER TIME FORM 1.xlsx`, printed A4 landscape). `GET /api/welfare/ot-report` (own records or admin) returns:
+- **One row per OT request** in `overtime_request`, whatever its status (approved / pending / rejected): the requested start–end, the check-in time actually logged inside that window (first and last moment of overlap), the overlap minutes, the rounded hours and the places logged in the window.
+- **One row per worked holiday with no OT request** (`no_request`, 0 hours).
+
+The hours use the same rules as welfare rule 3. TOTAL counts approved requests only; pending hours are shown in parentheses. The OT time arithmetic (`workedIntervals`, `otWindow`, `intersect`, `overlapMinutes`, `roundOtHours`) lives in `lib/otRules.ts`, shared by this form and the welfare calculation.
+
 ### Welfare calculation (`app/api/welfare/calculate/route.ts`)
 
 This is the one non-trivial piece of business logic. Given `{ employee_id, month, year }`, it runs inside a single MySQL transaction (`pool.getConnection()` → `beginTransaction`/`commit`/`rollback`/`release`) and computes four numbers from that employee's `attendance` rows for the given month, then upserts a row in `welfare_summary` (unique on `employee_id, month, year`, so recalculating a month overwrites it rather than duplicating):

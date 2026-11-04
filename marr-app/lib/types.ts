@@ -306,6 +306,38 @@ export interface TimeMintMonthReport {
   generated_at: string;
 }
 
+export type OtRowStatus = "approved" | "pending" | "rejected" | "no_request";
+
+/** One line of the OT & work-on-holiday form: an OT request (any status) or a worked holiday without one. */
+export interface OtFormRow {
+  date: string;
+  overtime_id: string | null;
+  requested_start: string | null; // "17:00"
+  requested_end: string | null;
+  requested_minutes: number;
+  actual_start: string | null; // first check-in time inside the requested window (or of the day when no request)
+  actual_end: string | null; // last check-out time inside that window
+  worked_minutes: number; // check-in time overlapping the request (welfare rule 3)
+  hours: number; // rounded OT hours (remainder < 20 min dropped, >= 20 min up)
+  status: OtRowStatus;
+  holiday: string | null; // "วันหยุดบริษัท (<name>)" / "วันหยุดประจำสัปดาห์" when the date is a holiday
+  place: string | null;
+  description: string | null; // OT reason, else its type
+}
+
+export interface OtForm {
+  employee_id: number;
+  emp_code: string;
+  employee_name: string;
+  position: string | null;
+  month: number;
+  year: number;
+  rows: OtFormRow[];
+  approved_hours: number; // what welfare rule 3 pays
+  pending_hours: number; // would be added once approved
+  imported_days: number;
+}
+
 export interface ApiError {
   error: string;
 }

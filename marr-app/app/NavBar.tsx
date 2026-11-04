@@ -15,7 +15,7 @@ const ADMIN_LINKS = [
 const USER_LINKS = [{ href: "/welfare", label: "Welfare Summary" }];
 
 // Pages an employee (role user) may open; anything else sends them to Welfare Summary.
-const USER_PAGES = ["/welfare", "/welfare/allowance-report", "/welfare/mileage", "/welfare/timemint", "/change-password"];
+const USER_PAGES = ["/welfare", "/welfare/allowance-report", "/welfare/mileage", "/welfare/timemint", "/welfare/ot", "/change-password"];
 
 /** Global header: role-aware links, the signed-in user and Logout. Also redirects by session state. */
 export default function NavBar() {

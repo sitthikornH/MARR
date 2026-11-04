@@ -186,6 +186,12 @@ export default function WelfareSummaryPage() {
           >
             TimeMint
           </button>
+          <button
+            onClick={() => handleOpenForm("/welfare/ot")}
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            OT &amp; Work on holiday
+          </button>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       </section>

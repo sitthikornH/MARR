@@ -3,6 +3,7 @@ import type { RowDataPacket } from "mysql2/promise";
 import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
 import pool from "@/lib/db";
 import { returnHomeBonus, type DayRuleRow } from "@/lib/dayRules";
+import { mergeIntervals, otWindow, overlapMinutes, roundOtHours, workedIntervals, type Interval } from "@/lib/otRules";
 import type { ApiError, WelfareCalculateRequest, WelfareCalculateResult } from "@/lib/types";
 
 interface DayRuleRowPacket extends RowDataPacket, DayRuleRow {}
@@ -10,7 +11,6 @@ interface DayRuleRowPacket extends RowDataPacket, DayRuleRow {}
 const MIN_ALLOWANCE_HOURS = 4; // allowance needs more than 4h from first check-in to last check-out, excluding lunch
 const LUNCH_START_HOUR = 12; // 12:00-13:00 lunch break is not counted toward the 4h
 const LUNCH_END_HOUR = 13;
-const OT_ROUND_UP_MINUTES = 20; // per-day OT remainder: < 20 min dropped, >= 20 min rounds up to the next hour
 interface EmployeeRow extends RowDataPacket {
   id: number;
   base_allowance: number;
@@ -40,14 +40,10 @@ interface OvertimeRow extends RowDataPacket {
   time_end: string;
 }
 
-type Interval = [number, number]; // minutes from midnight, start < end
-
 function timeStringToHours(time: string): number {
   const [h, m, s] = time.split(":").map(Number);
   return h + m / 60 + (s ?? 0) / 3600;
 }
-
-const toMinutes = (time: string) => timeStringToHours(time) * 60;
 
 /** Hours from check-in to check-out minus the part that falls inside the 12:00-13:00 lunch break. */
 function hoursExcludingLunch(timeIn: string, timeOut: string): number {
@@ -55,54 +51,6 @@ function hoursExcludingLunch(timeIn: string, timeOut: string): number {
   const end = timeStringToHours(timeOut);
   const lunch = Math.max(0, Math.min(end, LUNCH_END_HOUR) - Math.max(start, LUNCH_START_HOUR));
   return end - start - lunch;
-}
-
-function mergeIntervals(intervals: Interval[]): Interval[] {
-  const sorted = intervals.filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
-  const merged: Interval[] = [];
-  for (const [s, e] of sorted) {
-    const last = merged[merged.length - 1];
-    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
-    else merged.push([s, e]);
-  }
-  return merged;
-}
-
-/**
- * A day's worked intervals from its check-log rows. A row with both times is one interval; rows
- * holding only a check-in or only a check-out (TimeMint records them separately) are paired in
- * time order, each check-in with the next check-out. Unpaired times are ignored.
- */
-function workedIntervals(rows: CheckLogRow[]): Interval[] {
-  const intervals: Interval[] = [];
-  const events: { t: number; kind: "in" | "out" }[] = [];
-  for (const r of rows) {
-    if (r.time_in && r.time_out) intervals.push([toMinutes(r.time_in), toMinutes(r.time_out)]);
-    else if (r.time_in) events.push({ t: toMinutes(r.time_in), kind: "in" });
-    else if (r.time_out) events.push({ t: toMinutes(r.time_out), kind: "out" });
-  }
-  events.sort((a, b) => a.t - b.t);
-  let openIn: number | null = null;
-  for (const ev of events) {
-    if (ev.kind === "in") openIn ??= ev.t;
-    else if (openIn !== null) {
-      intervals.push([openIn, ev.t]);
-      openIn = null;
-    }
-  }
-  return mergeIntervals(intervals);
-}
-
-function overlapMinutes(a: Interval[], b: Interval[]): number {
-  let total = 0;
-  for (const [as, ae] of a) for (const [bs, be] of b) total += Math.max(0, Math.min(ae, be) - Math.max(as, bs));
-  return total;
-}
-
-/** Whole OT hours for one day: remainder < 20 min is dropped, >= 20 min rounds up. */
-function roundOtHours(minutes: number): number {
-  const whole = Math.floor(minutes / 60);
-  return minutes - whole * 60 >= OT_ROUND_UP_MINUTES ? whole + 1 : whole;
 }
 
 export async function POST(
@@ -192,10 +140,7 @@ export async function POST(
     );
     const otWindowsByDate = new Map<string, Interval[]>();
     for (const ot of overtimeRows) {
-      const start = toMinutes(ot.time_start);
-      let end = toMinutes(ot.time_end);
-      if (end <= start) end = 24 * 60; // request past midnight: count up to the end of the day
-      otWindowsByDate.set(ot.date, [...(otWindowsByDate.get(ot.date) ?? []), [start, end]]);
+      otWindowsByDate.set(ot.date, [...(otWindowsByDate.get(ot.date) ?? []), otWindow(ot.time_start, ot.time_end)]);
     }
     let totalOtHours = 0;
     for (const [date, windows] of otWindowsByDate) {
