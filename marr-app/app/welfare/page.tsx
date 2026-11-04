@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Employee, WelfareCalculateResult } from "@/lib/types";
+import type { AuthUser, Employee, WelfareCalculateResult } from "@/lib/types";
 
 const MONTH_NAMES = Array.from({ length: 12 }, (_, i) =>
   new Date(2000, i).toLocaleString("en-US", { month: "long" })
@@ -17,11 +17,21 @@ export default function WelfareSummaryPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<WelfareCalculateResult | null>(null);
 
+  // An employee (role user) only ever sees themselves: the API returns just their own row, and the
+  // select is fixed to it.
+  const [ownOnly, setOwnOnly] = useState(false);
+
   useEffect(() => {
     async function loadEmployees() {
       try {
-        const res = await fetch("/api/employees");
-        if (res.ok) setEmployees(await res.json());
+        const [meRes, empRes] = await Promise.all([fetch("/api/auth/me"), fetch("/api/employees")]);
+        const me = meRes.ok ? ((await meRes.json()) as AuthUser) : null;
+        const list: Employee[] = empRes.ok ? await empRes.json() : [];
+        setEmployees(list);
+        if (me?.role === "user") {
+          setOwnOnly(true);
+          if (me.employee_id !== null) setEmployeeId(String(me.employee_id));
+        }
       } catch {
         // Non-critical; the select will just be empty.
       }
@@ -107,9 +117,10 @@ export default function WelfareSummaryPage() {
             <select
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+              disabled={ownOnly}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:bg-gray-50 disabled:text-gray-900"
             >
-              <option value="">Select employee...</option>
+              {!ownOnly && <option value="">Select employee...</option>}
               {employees.map((employee) => (
                 <option key={employee.id} value={employee.id}>
                   {employee.emp_code} - {employee.name}
