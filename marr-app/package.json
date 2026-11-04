@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "create-admin": "node scripts/create-admin.mjs"
+    "create-admin": "node scripts/create-admin.mjs",
+    "dump-schema": "node scripts/dump-schema.mjs"
   },
   "dependencies": {
     "react": "19.1.0",

@@ -19,7 +19,7 @@ Run all commands from `marr-app/`:
 
 No test runner is configured yet.
 
-`D:\MARR` is a Git repository (branch `main`, committer Sitthikorn.hong@gmail.com, installed 2026-11-02 at `C:\Program Files\Git\cmd\git.exe`). Released versions are annotated tags named `MARR-V.<n>` (tag names cannot contain spaces); `MARR-V.1` is the first. The root `.gitignore` keeps `.env*`, `node_modules/`, `.next/` and `versions/` out of Git. `versions/` also holds a zip snapshot of V.1 (`MARR V.1.zip`) made before Git was installed.
+`D:\MARR` is a Git repository (branch `main`, committer Sitthikorn.hong@gmail.com, installed 2026-11-02 at `C:\Program Files\Git\cmd\git.exe`). Each release also stores the live database structure (no data) as `marr-app/db/schema_MARR-V.<n>.sql`, written by `npm run dump-schema -- MARR-V.<n>` (`scripts/dump-schema.mjs`, from `SHOW CREATE TABLE`). Unlike the hand-maintained `schema.sql`, which has upgrade notes, this is an exact snapshot that can be restored with `mysql -u root -p < db/schema_MARR-V.<n>.sql`. Released versions are annotated tags named `MARR-V.<n>` (tag names cannot contain spaces); `MARR-V.1` is the first. The root `.gitignore` keeps `.env*`, `node_modules/`, `.next/` and `versions/` out of Git. `versions/` also holds a zip snapshot of V.1 (`MARR V.1.zip`) made before Git was installed.
 
 ### Database setup
 
