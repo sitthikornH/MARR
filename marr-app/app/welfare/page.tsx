@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { AuthUser, Employee, WelfareCalculateResult } from "@/lib/types";
 
@@ -8,6 +9,7 @@ const MONTH_NAMES = Array.from({ length: 12 }, (_, i) =>
 );
 
 export default function WelfareSummaryPage() {
+  const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState("");
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
@@ -22,6 +24,12 @@ export default function WelfareSummaryPage() {
   const [ownOnly, setOwnOnly] = useState(false);
 
   useEffect(() => {
+    // The forms' Back links return here with ?employee_id=&month=&year=, so keep that selection.
+    const initial = new URLSearchParams(window.location.search);
+    if (initial.get("month")) setMonth(initial.get("month")!);
+    if (initial.get("year")) setYear(initial.get("year")!);
+    if (initial.get("employee_id")) setEmployeeId(initial.get("employee_id")!);
+
     async function loadEmployees() {
       try {
         const [meRes, empRes] = await Promise.all([fetch("/api/auth/me"), fetch("/api/employees")]);
@@ -81,7 +89,7 @@ export default function WelfareSummaryPage() {
       return;
     }
     const params = new URLSearchParams({ employee_id: employeeId, month, year });
-    window.open(`${path}?${params.toString()}`, "_blank");
+    router.push(`${path}?${params.toString()}`);
   }
 
   const resultCards = result

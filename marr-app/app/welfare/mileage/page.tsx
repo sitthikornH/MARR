@@ -223,7 +223,7 @@ function FormView() {
       <style>{`@media print { @page { size: A4; margin: 8mm; } body { background: white !important; } ${PRINT_COLORS_CSS} }`}</style>
 
       <div className="print:hidden flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <Link href="/welfare" className="text-sm text-gray-600 underline">
+        <Link href={`/welfare?employee_id=${employeeId}&month=${month}&year=${year}`} className="text-sm text-gray-600 underline">
           ← Back
         </Link>
         <p className="text-sm text-gray-700">
