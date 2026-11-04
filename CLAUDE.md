@@ -115,6 +115,17 @@ The "Allowance Report" button on Welfare Summary opens `/welfare/allowance-repor
 
 The "Mileage & Telephone" button on Welfare Summary opens `/welfare/mileage?employee_id=&month=&year=`: the company's "Other Income for Mileage and Telephone Charge" form (ENSYS, Mileage - 301, Telephone & Internet Charge - 310). `GET /api/welfare/mileage` returns the header (same sources as the allowance report), the month's days classified by `lib/dayRules.ts`, and what has been submitted. Each day with check-ins (`work` / `uncounted` / `holiday_work`) gets **one row per leg** (Date, Time, From, To, TOTAL KM — no Site column). Legs come from `day_places`: the day's check-in places in time order with consecutive repeats collapsed. Leg 1 is "ที่พัก" → first place (with the shift time), and each later leg goes from the previous place → the next. Each leg is submitted on its own with `PUT /api/welfare/mileage/entry`, an upsert keyed by `(claim, date, seq)`; `mileage_entry.seq` is the leg number and `site` is no longer filled. Legs saved before this change are kept as leg 1. "Total Other Income" lists Mileage (km × rate), **ค่ากลับบ้าน** (computed live with `returnHomeBonus()` from `lib/dayRules.ts`, the same as welfare rule 4), **Telephone** (`mileage_claim.telephone_amount`; when the month has none saved, the latest amount saved in an earlier month is pre-filled and flagged "from last saved"), then free extra lines. Rate per km (default 5.00), telephone, remarks and extra lines are saved with `PUT /api/welfare/mileage/claim`. Tables: `mileage_claim` (one per employee/month) → `mileage_entry` (one per day) and `mileage_other_item`. Totals and the printout use **submitted** rows only; unsubmitted rows print blank except the pre-filled place.
 
+### TimeMint attendance report (`/welfare/timemint`)
+
+The "TimeMint" button on Welfare Summary opens `/welfare/timemint?employee_id=&month=&year=`, a printable copy of TimeMint's own attendance report layout (sample: `ฟอร์มเอกสาร/Timemint.pdf`). `GET /api/welfare/timemint-report` (own records or admin) builds it from stored data, with one row per calendar day:
+- **รหัสพนักงาน / ชื่อพนักงาน:** emp_code and `employees.name` (Thai).
+- **วันที่, เวลาทำงาน:** the date and the shift start–end.
+- **บันทึกเวลา:** first check-in and last check-out.
+- **สถานที่:** one line per check-log, `[in->out] > [ place ]`, with a missing time shown as 00:00. With no check-logs, the cell holds the leave type in Thai or the company holiday name.
+- **จำนวนวันลา (ลากิจ / ลาป่วย / ลาพักร้อน):** from full-day leaves in `attendance.leave_type`, matched on Personal / Sick / Vacation|Annual Leave. Hourly leaves aren't counted.
+
+A ยอดรวม row follows, then "วันทำงานตาม TimeMint = days with check-logs" and the time the report was produced. Rows use the same highlight colours as the other forms.
+
 ### Welfare calculation (`app/api/welfare/calculate/route.ts`)
 
 This is the one non-trivial piece of business logic. Given `{ employee_id, month, year }`, it runs inside a single MySQL transaction (`pool.getConnection()` → `beginTransaction`/`commit`/`rollback`/`release`) and computes four numbers from that employee's `attendance` rows for the given month, then upserts a row in `welfare_summary` (unique on `employee_id, month, year`, so recalculating a month overwrites it rather than duplicating):

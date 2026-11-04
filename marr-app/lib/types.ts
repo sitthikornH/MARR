@@ -275,6 +275,37 @@ export interface CompanyImportResult {
   seconds: number;
 }
 
+export interface LeaveDays {
+  personal: number; // ลากิจ
+  sick: number; // ลาป่วย
+  vacation: number; // ลาพักร้อน
+}
+
+export interface TimeMintReportDay {
+  date: string;
+  work_time: string | null; // "08:00 17:00"
+  record: string | null; // first check-in and last check-out, "07:31 18:00"
+  places: string[]; // one line per check-log: "[07:31->18:00] > [ BlueScope ]"
+  note: string | null; // leave type (Thai) or company holiday name when there are no check-logs
+  leave: LeaveDays;
+  company_holiday: boolean;
+  weekly_holiday: boolean;
+}
+
+/** TimeMint-style monthly attendance report (Welfare Summary > TimeMint), from stored attendance_report rows. */
+export interface TimeMintMonthReport {
+  employee_id: number;
+  emp_code: string;
+  employee_name: string;
+  month: number;
+  year: number;
+  days: TimeMintReportDay[];
+  totals: LeaveDays;
+  worked_days: number; // days with at least one check-log
+  imported_days: number;
+  generated_at: string;
+}
+
 export interface ApiError {
   error: string;
 }
