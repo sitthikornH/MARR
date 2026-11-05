@@ -355,10 +355,6 @@ export interface FixedTimeRequestRow {
   image_url: string | null; // http(s) only
 }
 
-export interface TimeMintWebSessionStatus {
-  open: boolean;
-}
-
 export interface FixHistoryEmployeeResult {
   employee_id: number;
   emp_code: string;
@@ -366,10 +362,6 @@ export interface FixHistoryEmployeeResult {
   saved: number;
   skipped: number; // rows without a readable record number or date
   error: string | null;
-}
-
-export interface FixHistoryImportResult {
-  employees: FixHistoryEmployeeResult[];
 }
 
 export interface FixedTimeRequestReport {

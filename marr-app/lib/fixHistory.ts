@@ -91,6 +91,27 @@ export function parseFixTimes(value: string): [string | null, string | null] {
   return m ? [clock(m[1]), clock(m[2])] : [null, null];
 }
 
+const MAX_TABLES = 50;
+const MAX_ROWS_PER_TABLE = 20_000;
+
+/** Checks the page data the browser sent. Returns null when it isn't table data. */
+export function toFixHistoryTables(value: unknown): FixHistoryTable[] | null {
+  if (!Array.isArray(value) || value.length > MAX_TABLES) return null;
+  const tables: FixHistoryTable[] = [];
+  for (const t of value as Partial<FixHistoryTable>[]) {
+    if (!t || !Array.isArray(t.headers) || !Array.isArray(t.rows) || t.rows.length > MAX_ROWS_PER_TABLE) return null;
+    if (t.headers.some((h) => typeof h !== "string")) return null;
+    const valid = t.rows.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.every((c) => c && typeof c.text === "string" && (c.link === null || typeof c.link === "string"))
+    );
+    if (!valid) return null;
+    tables.push({ section: typeof t.section === "string" ? t.section : null, headers: t.headers, rows: t.rows });
+  }
+  return tables;
+}
+
 /** `recognized` is false when no table on the page has this report's columns. */
 export function parseFixHistory(tables: FixHistoryTable[]): { recognized: boolean; records: FixHistoryRecord[]; skipped: number } {
   const byNo = new Map<string, FixHistoryRecord>();
