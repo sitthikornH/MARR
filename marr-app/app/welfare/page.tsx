@@ -160,7 +160,7 @@ export default function WelfareSummaryPage() {
             />
           </div>
         </div>
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
             onClick={handleCalculate}
             disabled={calculating}
@@ -191,6 +191,12 @@ export default function WelfareSummaryPage() {
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
             OT &amp; Work on holiday
+          </button>
+          <button
+            onClick={() => handleOpenForm("/welfare/fixed-time")}
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            Fixed Time Request
           </button>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>

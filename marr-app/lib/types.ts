@@ -272,15 +272,7 @@ export interface CompanyImportResult {
   not_in_timemint: string[]; // MARR emp_codes TimeMint returned nothing for
   not_in_marr: string[]; // TimeMint EmpIDs with no MARR employee (run the employee sync)
   warnings: string[]; // optional sources that failed
-  time_adjustments: TimeAdjustmentImport;
   seconds: number;
-}
-
-/** What the import took from TimeMint's "Time Adjustment Request" report files. */
-export interface TimeAdjustmentImport {
-  reports_read: number;
-  records_saved: number;
-  records_skipped: number; // employee not in MARR, or the row had no record no / date
 }
 
 export interface LeaveDays {
@@ -344,6 +336,50 @@ export interface OtForm {
   approved_hours: number; // what welfare rule 3 pays
   pending_hours: number; // would be added once approved
   imported_days: number;
+}
+
+/** One row of the Fixed Time Request page (table time_adjustment_request). */
+export interface FixedTimeRequestRow {
+  record_no: string;
+  record_type: string | null;
+  date: string;
+  from_time_in: string | null;
+  from_time_out: string | null;
+  to_time_in: string | null;
+  to_time_out: string | null;
+  reason: string | null;
+  added_by: string | null;
+  created_date: string | null;
+  status: string | null;
+  approver: string | null;
+  image_url: string | null; // http(s) only
+}
+
+export interface TimeMintWebSessionStatus {
+  open: boolean;
+}
+
+export interface FixHistoryEmployeeResult {
+  employee_id: number;
+  emp_code: string;
+  name: string;
+  saved: number;
+  skipped: number; // rows without a readable record number or date
+  error: string | null;
+}
+
+export interface FixHistoryImportResult {
+  employees: FixHistoryEmployeeResult[];
+}
+
+export interface FixedTimeRequestReport {
+  employee_id: number;
+  emp_code: string;
+  employee_name: string;
+  position: string | null;
+  month: number;
+  year: number;
+  rows: FixedTimeRequestRow[];
 }
 
 export interface ApiError {

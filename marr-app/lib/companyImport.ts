@@ -6,8 +6,6 @@ import pool, { execute, query } from "@/lib/db";
 import { buildAttendanceReport, type BuiltReport } from "@/lib/attendanceReport";
 import {
   addDays,
-  downloadReportFile,
-  fetchTimeAdjustmentReports,
   fetchAnnualHolidays,
   fetchApprovedLeaves,
   fetchCheckLogs,
@@ -25,9 +23,7 @@ import {
   type TimeMintOvertime,
   type TimeMintShift,
 } from "@/lib/timemint";
-import { parseTimeAdjustmentSheet, TIME_ADJUSTMENT_UPSERT_SQL } from "@/lib/timeAdjustment";
-import type { CompanyImportResult, SyncStatus, TimeAdjustmentImport } from "@/lib/types";
-import { readFirstSheet } from "@/lib/xlsxRead";
+import type { CompanyImportResult, SyncStatus } from "@/lib/types";
 
 export function localToday(): string {
   const d = new Date();
@@ -193,89 +189,6 @@ async function recordImportOutcome(status: SyncStatus, message: string): Promise
   );
 }
 
-const MAX_ADJUSTMENT_REPORTS = 5; // newest report files read per import
-
-/**
- * Upserts the records of the "Time Adjustment Request" report files covering the range into
- * time_adjustment_request (history: rows are never deleted). Files are read oldest first, so the
- * newest status wins. Any problem becomes a warning: attendance has already been saved by then.
- */
-async function importTimeAdjustments(
-  dateStart: string,
-  dateEnd: string,
-  employeeIds: Map<string, number>,
-  warnings: string[]
-): Promise<TimeAdjustmentImport> {
-  const summary: TimeAdjustmentImport = { reports_read: 0, records_saved: 0, records_skipped: 0 };
-  try {
-    const reports = (await fetchTimeAdjustmentReports())
-      .filter((r) => String(r.STATUS_CODE) === "99" && r.PATH && r.DATESTART <= dateEnd && r.DATEEND >= dateStart)
-      .sort((a, b) => a.ADD.localeCompare(b.ADD))
-      .slice(-MAX_ADJUSTMENT_REPORTS);
-    if (reports.length === 0) {
-      warnings.push(`No "Time Adjustment Request" report in TimeMint covers ${dateStart}..${dateEnd}; generate one there first`);
-      return summary;
-    }
-
-    const parsed = [];
-    for (const report of reports) {
-      const sheet = parseTimeAdjustmentSheet(readFirstSheet(await downloadReportFile(report.PATH!)));
-      if (!sheet.recognized) {
-        warnings.push(`Time adjustment report ${report.ID} has unexpected columns, so it was skipped`);
-        continue;
-      }
-      summary.reports_read++;
-      summary.records_skipped += sheet.skipped;
-      parsed.push({ reportId: report.ID, records: sheet.records });
-    }
-
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-      for (const { reportId, records } of parsed) {
-        for (const r of records) {
-          const employeeId = employeeIds.get(r.emp_code);
-          if (employeeId === undefined) {
-            summary.records_skipped++;
-            continue;
-          }
-          await connection.execute(TIME_ADJUSTMENT_UPSERT_SQL, [
-            employeeId,
-            r.record_no,
-            r.emp_code,
-            r.employee_name,
-            r.position,
-            r.employee_group,
-            r.date,
-            r.from_time_in,
-            r.from_time_out,
-            r.to_time_in,
-            r.to_time_out,
-            r.reason,
-            r.place,
-            r.added_by,
-            r.created_date,
-            r.status,
-            r.image_url,
-            reportId,
-          ]);
-          summary.records_saved++;
-        }
-      }
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-  } catch (error) {
-    summary.records_saved = 0;
-    warnings.push(`Time adjustment requests could not be imported (${error instanceof Error ? error.message : String(error)})`);
-  }
-  return summary;
-}
-
 let importInProgress = false;
 
 /**
@@ -300,7 +213,6 @@ export async function runCompanyImport(dateStart: string, dateEnd: string): Prom
       not_in_timemint: [],
       not_in_marr: [...timemintCodes].filter((code) => !employees.some((e) => e.emp_code === code)),
       warnings: sources.warnings,
-      time_adjustments: { reports_read: 0, records_saved: 0, records_skipped: 0 },
       seconds: 0,
     };
 
@@ -334,18 +246,10 @@ export async function runCompanyImport(dateStart: string, dateEnd: string): Prom
       connection.release();
     }
 
-    result.time_adjustments = await importTimeAdjustments(
-      dateStart,
-      dateEnd,
-      new Map(employees.map((e) => [e.emp_code as string, e.id as number])),
-      result.warnings
-    );
-
     result.seconds = Math.round((Date.now() - started) / 100) / 10;
     await recordImportOutcome(
       "success",
       `${dateStart}..${dateEnd}: ${result.employees.length} employee(s) imported` +
-        `, ${result.time_adjustments.records_saved} time adjustment request(s)` +
         (result.not_in_marr.length ? `, ${result.not_in_marr.length} not in MARR (sync employees first)` : "") +
         (result.warnings.length ? `, ${result.warnings.length} warning(s)` : "")
     );

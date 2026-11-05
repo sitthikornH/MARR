@@ -120,6 +120,10 @@ CREATE TABLE IF NOT EXISTS time_adjustment_request (
   status VARCHAR(50) NULL,
   image_url VARCHAR(1000) NULL,
   source_report_id VARCHAR(50) NULL,
+  record_type VARCHAR(100) NULL,
+  system_owner VARCHAR(255) NULL,
+  approver VARCHAR(255) NULL,
+  approval_type VARCHAR(100) NULL,
   imported_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_time_adjustment_employee FOREIGN KEY (employee_id)
     REFERENCES employees(id) ON DELETE CASCADE,
@@ -195,6 +199,13 @@ CREATE TABLE IF NOT EXISTS sessions (
   CONSTRAINT fk_sessions_user FOREIGN KEY (user_id)
     REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- Upgrade for databases whose time_adjustment_request predates record_type (run once):
+-- ALTER TABLE time_adjustment_request
+--   ADD COLUMN record_type VARCHAR(100) NULL AFTER source_report_id,
+--   ADD COLUMN system_owner VARCHAR(255) NULL AFTER record_type,
+--   ADD COLUMN approver VARCHAR(255) NULL AFTER system_owner,
+--   ADD COLUMN approval_type VARCHAR(100) NULL AFTER approver;
 
 -- Upgrade for databases whose attendance_report predates the columns above
 -- (run once; MySQL errors if a column already exists, which is safe to ignore):

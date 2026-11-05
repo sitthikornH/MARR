@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AppSettings, EmployeeSyncResult } from "@/lib/types";
 import AutoImportSection from "./AutoImportSection";
+import FixHistorySection from "./FixHistorySection";
 
 const INTERVAL_LABELS: { value: number; label: string }[] = [
   { value: 15, label: "Every 15 minutes" },
@@ -182,6 +183,8 @@ export default function SettingsPage() {
       {settings && (
         <AutoImportSection settings={settings} intervals={INTERVAL_LABELS} onSaved={applySettings} onReload={loadSettings} />
       )}
+
+      <FixHistorySection />
     </div>
   );
 }
