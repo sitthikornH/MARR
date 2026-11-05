@@ -3,10 +3,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { execute, query, type RowDataPacket } from "@/lib/db";
+import { IDLE_TIMEOUT_MINUTES } from "@/lib/sessionRules";
 import type { ApiError, AuthUser } from "@/lib/types";
 
 export const SESSION_COOKIE = "marr_session";
-const SESSION_HOURS = 12;
+const SESSION_HOURS = 12; // the longest a session can last, even when in constant use
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -14,7 +15,9 @@ const sha256 = (value: string) => createHash("sha256").update(value).digest("hex
 export async function startSession(response: NextResponse, request: NextRequest, userId: number): Promise<void> {
   const token = randomBytes(32).toString("base64url");
   const uid: number = userId;
-  await execute("DELETE FROM sessions WHERE expires_at < NOW()");
+  await execute("DELETE FROM sessions WHERE expires_at < NOW() OR last_active_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)", [
+    IDLE_TIMEOUT_MINUTES,
+  ]);
   await execute(
     "INSERT INTO sessions (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? HOUR))",
     [uid, sha256(token), SESSION_HOURS]
@@ -34,18 +37,20 @@ export async function endSession(response: NextResponse, request: NextRequest): 
   response.cookies.set(SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
 }
 
-/** The signed-in user for this request, or null. */
+/** The signed-in user for this request, or null. A valid request counts as activity on the session. */
 export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (!token) return null;
+  const tokenHash = sha256(token);
   const rows = await query<RowDataPacket[]>(
     `SELECT u.id, u.username, u.role, u.employee_id, u.must_change_password, e.name AS employee_name
      FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN employees e ON e.id = u.employee_id
-     WHERE s.token_hash = ? AND s.expires_at > NOW()`,
-    [sha256(token)]
+     WHERE s.token_hash = ? AND s.expires_at > NOW() AND s.last_active_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)`,
+    [tokenHash, IDLE_TIMEOUT_MINUTES]
   );
   const row = rows[0];
   if (!row) return null;
+  await execute("UPDATE sessions SET last_active_at = NOW() WHERE token_hash = ?", [tokenHash]);
   return {
     user_id: row.id,
     username: row.username,

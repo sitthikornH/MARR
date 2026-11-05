@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { AuthUser } from "@/lib/types";
 
 export default function LoginPage() {
@@ -10,6 +10,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [expired, setExpired] = useState(false);
+
+  useEffect(() => {
+    setExpired(new URLSearchParams(window.location.search).has("expired"));
+  }, []);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -37,6 +42,11 @@ export default function LoginPage() {
     <div className="mx-auto mt-16 max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <h1 className="text-xl font-semibold text-gray-900">Project MARR</h1>
       <p className="mt-1 text-sm text-gray-500">Sign in to see your welfare reports.</p>
+      {expired && (
+        <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          ไม่มีการใช้งานเกิน 30 นาที กรุณาเข้าสู่ระบบอีกครั้ง
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         <div className="flex flex-col gap-1">

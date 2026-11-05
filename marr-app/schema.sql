@@ -195,10 +195,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_id INT NOT NULL,
   token_hash CHAR(64) NOT NULL UNIQUE, -- sha256 of the cookie token; the token itself is never stored
   expires_at DATETIME NOT NULL,
+  last_active_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, -- idle over 30 minutes = must log in again
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_sessions_user FOREIGN KEY (user_id)
     REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- Upgrade for databases whose sessions predates last_active_at (run once):
+-- ALTER TABLE sessions ADD COLUMN last_active_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER expires_at;
 
 -- Upgrade for databases whose time_adjustment_request predates record_type (run once):
 -- ALTER TABLE time_adjustment_request

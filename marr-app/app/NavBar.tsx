@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AuthUser } from "@/lib/types";
+import { useIdleLogout } from "./useIdleLogout";
 
 const ADMIN_LINKS = [
   { href: "/", label: "Dashboard" },
@@ -44,6 +45,16 @@ export default function NavBar() {
       cancelled = true;
     };
   }, [pathname, router]);
+
+  const onIdle = useCallback(() => {
+    fetch("/api/auth/logout", { method: "POST" })
+      .catch(() => {})
+      .finally(() => {
+        setMe(null);
+        router.replace("/login?expired=1");
+      });
+  }, [router]);
+  useIdleLogout(pathname !== "/login", onIdle);
 
   if (pathname === "/login") return null;
 
