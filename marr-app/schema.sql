@@ -204,6 +204,22 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- Upgrade for databases whose sessions predates last_active_at (run once):
 -- ALTER TABLE sessions ADD COLUMN last_active_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER expires_at;
 
+-- One row per sign-in and sign-out (lib/auth.ts startSession/endSession), including the automatic
+-- sign-out after 30 minutes idle. username/employee_name/role are a snapshot at the time of the event,
+-- so the history still reads correctly after a rename or after the account is removed.
+CREATE TABLE IF NOT EXISTS login_history (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  username VARCHAR(100) NOT NULL,
+  employee_name VARCHAR(100) NULL,
+  role VARCHAR(10) NOT NULL,
+  event VARCHAR(10) NOT NULL, -- 'login' | 'logout'
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_login_history_user FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE SET NULL,
+  INDEX idx_login_history_created (created_at)
+);
+
 -- Upgrade for databases whose time_adjustment_request predates record_type (run once):
 -- ALTER TABLE time_adjustment_request
 --   ADD COLUMN record_type VARCHAR(100) NULL AFTER source_report_id,

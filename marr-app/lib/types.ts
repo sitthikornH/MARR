@@ -374,6 +374,18 @@ export interface FixedTimeRequestReport {
   rows: FixedTimeRequestRow[];
 }
 
+export type LoginHistoryEvent = "login" | "logout";
+
+/** One row of the Settings > Login History list (table login_history). */
+export interface LoginHistoryRow {
+  id: number;
+  username: string;
+  employee_name: string | null;
+  role: UserRole;
+  event: LoginHistoryEvent;
+  created_at: string;
+}
+
 export interface ApiError {
   error: string;
 }

@@ -11,6 +11,21 @@ const SESSION_HOURS = 12; // the longest a session can last, even when in consta
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
+/** Records one row in login_history, snapshotting the user's current username/name/role. */
+async function recordLoginEvent(userId: number, event: "login" | "logout"): Promise<void> {
+  const rows = await query<RowDataPacket[]>(
+    `SELECT u.username, u.role, e.name AS employee_name FROM users u
+     LEFT JOIN employees e ON e.id = u.employee_id WHERE u.id = ?`,
+    [userId]
+  );
+  const row = rows[0];
+  if (!row) return;
+  await execute(
+    "INSERT INTO login_history (user_id, username, employee_name, role, event) VALUES (?, ?, ?, ?, ?)",
+    [userId, row.username, row.employee_name ?? null, row.role, event]
+  );
+}
+
 /** Creates a session for the user and sets its cookie on the response. */
 export async function startSession(response: NextResponse, request: NextRequest, userId: number): Promise<void> {
   const token = randomBytes(32).toString("base64url");
@@ -29,11 +44,18 @@ export async function startSession(response: NextResponse, request: NextRequest,
     path: "/",
     maxAge: SESSION_HOURS * 3600,
   });
+  await recordLoginEvent(uid, "login");
 }
 
 export async function endSession(response: NextResponse, request: NextRequest): Promise<void> {
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (token) await execute("DELETE FROM sessions WHERE token_hash = ?", [sha256(token)]);
+  if (token) {
+    const tokenHash = sha256(token);
+    const rows = await query<RowDataPacket[]>("SELECT user_id FROM sessions WHERE token_hash = ?", [tokenHash]);
+    const userId: number | undefined = rows[0]?.user_id;
+    await execute("DELETE FROM sessions WHERE token_hash = ?", [tokenHash]);
+    if (userId) await recordLoginEvent(userId, "logout");
+  }
   response.cookies.set(SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
 }
 
