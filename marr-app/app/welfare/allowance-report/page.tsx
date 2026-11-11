@@ -59,6 +59,14 @@ function ReportView() {
   const totalAllowance = totalDays * dayRate;
   const totalHolidayAllowance = totalHolidays * holidayRate;
   const grandTotal = totalAllowance + totalHolidayAllowance;
+
+  // Allowance split by site, in order of first appearance.
+  const allowanceBySite = new Map<string, number>();
+  for (const d of report.days) {
+    if (d.kind !== "work") continue;
+    const site = d.site ?? "";
+    allowanceBySite.set(site, (allowanceBySite.get(site) ?? 0) + 1);
+  }
   const tiers = RATE_TIERS.includes(dayRate) ? RATE_TIERS : [...RATE_TIERS, dayRate];
 
   // Running count shown at the right of the Time cell: 1, 2, ... for days counted in Total Day,
@@ -278,9 +286,11 @@ function ReportView() {
                     {r}
                   </li>
                 ))}
-                <li className="border-b border-dotted border-gray-800 pb-0.5">
-                  Allowance {money(dayRate)} × {totalDays} = {money(totalAllowance)}
-                </li>
+                {[...allowanceBySite.entries()].map(([site, count]) => (
+                  <li key={site} className="border-b border-dotted border-gray-800 pb-0.5">
+                    {site} {money(dayRate)} × {count} = {money(dayRate * count)}
+                  </li>
+                ))}
                 <li className="border-b border-dotted border-gray-800 pb-0.5">
                   Holiday {money(holidayRate)} × {totalHolidays} = {money(totalHolidayAllowance)}
                 </li>

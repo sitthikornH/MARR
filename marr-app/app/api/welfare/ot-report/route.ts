@@ -34,6 +34,7 @@ interface OvertimeRow extends RowDataPacket {
   day_type: string | null;
   reason: string | null;
   status: string;
+  requested_at: string | null;
 }
 
 const hhmm = (t: string) => t.slice(0, 5);
@@ -95,8 +96,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<OtForm | A
       [employeeId, year, month]
     );
     const overtimes = await query<OvertimeRow[]>(
-      `SELECT overtime_id, date, time_start, time_end, minutes, overtime_type, day_type, reason, status
-       FROM overtime_request WHERE employee_id = ? AND YEAR(date) = ? AND MONTH(date) = ? ORDER BY date, time_start`,
+      `SELECT o.overtime_id, o.date, o.time_start, o.time_end, o.minutes, o.overtime_type, o.day_type, o.reason,
+              o.status, a.requested_at
+       FROM overtime_request o
+       LEFT JOIN overtime_added_at a ON a.overtime_id = o.overtime_id
+       WHERE o.employee_id = ? AND YEAR(o.date) = ? AND MONTH(o.date) = ? ORDER BY o.date, o.time_start`,
       [employeeId, year, month]
     );
 
@@ -119,6 +123,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<OtForm | A
       return {
         date: ot.date,
         overtime_id: ot.overtime_id,
+        requested_at: ot.requested_at,
         requested_start: hhmm(ot.time_start),
         requested_end: hhmm(ot.time_end),
         requested_minutes: Number(ot.minutes) || window[1] - window[0],
@@ -144,6 +149,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<OtForm | A
       rows.push({
         date,
         overtime_id: null,
+        requested_at: null,
         requested_start: null,
         requested_end: null,
         requested_minutes: 0,

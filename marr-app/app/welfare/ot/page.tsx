@@ -14,6 +14,12 @@ function thaiDate(date: string): string {
 
 const duration = (minutes: number) => `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
 
+/** "2026-11-04 14:38:39" -> "04/11/2569 : 14:38" (Buddhist year, as on the paper form). */
+function thaiDateTime(value: string): string {
+  const [datePart, timePart] = value.split(" ");
+  return `${thaiDate(datePart)} : ${(timePart ?? "").slice(0, 5)}`;
+}
+
 const STATUS: Record<OtFormRow["status"], { label: string; className: string }> = {
   approved: { label: "อนุมัติ", className: "text-green-700" },
   pending: { label: "รออนุมัติ", className: "text-amber-700" },
@@ -100,6 +106,7 @@ function FormView() {
         <table className="mt-4 w-full border-collapse">
           <thead>
             <tr>
+              <th className={cell} rowSpan={2}>วัน : เวลาแจ้ง</th>
               <th className={cell} rowSpan={2}>วันที่ทำงาน</th>
               <th className={cell} colSpan={2}>เวลาที่ขอ OT</th>
               <th className={cell} colSpan={2}>ลงเวลาจริงในช่วงนั้น</th>
@@ -124,6 +131,9 @@ function FormView() {
             {form.rows.map((r, i) => (
               <tr key={r.overtime_id ?? `${r.date}-${i}`} className={rowClass(r)}>
                 <td className={`${cell} text-center whitespace-nowrap`}>
+                  {r.requested_at ? thaiDateTime(r.requested_at) : "-"}
+                </td>
+                <td className={`${cell} text-center whitespace-nowrap`}>
                   {thaiDate(r.date)}
                   {r.holiday && <div className="text-[9px] text-gray-600">{r.holiday}</div>}
                 </td>
@@ -143,13 +153,13 @@ function FormView() {
             ))}
             {Array.from({ length: blankRows }, (_, i) => (
               <tr key={`blank-${i}`}>
-                {Array.from({ length: 10 }, (_, j) => (
+                {Array.from({ length: 11 }, (_, j) => (
                   <td key={j} className={`${cell} h-6`}></td>
                 ))}
               </tr>
             ))}
             <tr className="font-semibold">
-              <td className={`${cell} text-center`} colSpan={5}>
+              <td className={`${cell} text-center`} colSpan={6}>
                 TOTAL
               </td>
               <td className={`${cell} text-center`}>{form.approved_hours}</td>

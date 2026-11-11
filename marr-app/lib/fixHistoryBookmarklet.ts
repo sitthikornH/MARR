@@ -52,14 +52,14 @@ const SOURCE = `(async function () {
     });
   }
 
-  function loadPage(empCode) {
+  function loadPage(path, empCode) {
     return new Promise(function (resolve, reject) {
       var frame = document.createElement("iframe");
       frame.style.cssText = "position:fixed;left:-20000px;top:0;width:1600px;height:1000px;border:0";
       var timer = setTimeout(function () { frame.remove(); reject(new Error("timeout")); }, 40000);
       frame.onload = async function () {
         try {
-          if (frame.contentWindow.location.pathname !== "/viewfix.php") throw new Error("login");
+          if (frame.contentWindow.location.pathname !== path) throw new Error("login");
           var doc = frame.contentDocument, last = -1, stable = 0;
           /* The page may fill its tables after loading: wait until the row count stops changing. */
           for (var i = 0; i < 60 && stable < 3; i++) {
@@ -76,7 +76,7 @@ const SOURCE = `(async function () {
           frame.remove();
         }
       };
-      frame.src = "/viewfix.php?id=" + encodeURIComponent(empCode);
+      frame.src = path + "?id=" + encodeURIComponent(empCode);
       document.body.appendChild(frame);
     });
   }
@@ -102,10 +102,10 @@ const SOURCE = `(async function () {
     if (employees.length === 0) { say("MARR: ยังไม่ได้เลือกพนักงานในหน้า Settings"); return; }
     for (var n = 0; n < employees.length; n++) {
       var emp = employees[n];
-      say("MARR: กำลังอ่าน " + (n + 1) + "/" + employees.length + " " + emp.name);
+      say("MARR: กำลังอ่าน " + (n + 1) + "/" + employees.length + " " + emp.name + " (เวลาปรับปรุง)");
       try {
-        var tables = await loadPage(emp.emp_code);
-        marr.postMessage({ type: "marr-fix-page", employee_id: emp.id, tables: tables }, MARR);
+        var fixTables = await loadPage("/viewfix.php", emp.emp_code);
+        marr.postMessage({ type: "marr-fix-page", employee_id: emp.id, tables: fixTables }, MARR);
       } catch (error) {
         if (error && error.message === "login") {
           marr.postMessage({ type: "marr-fix-error", message: "Not logged in to TimeMint" }, MARR);
@@ -113,6 +113,20 @@ const SOURCE = `(async function () {
           return;
         }
         marr.postMessage({ type: "marr-fix-page", employee_id: emp.id, tables: null }, MARR);
+      }
+      await sleep(1000);
+
+      say("MARR: กำลังอ่าน " + (n + 1) + "/" + employees.length + " " + emp.name + " (คำขอ OT)");
+      try {
+        var otTables = await loadPage("/viewot.php", emp.emp_code);
+        marr.postMessage({ type: "marr-ot-page", employee_id: emp.id, tables: otTables }, MARR);
+      } catch (error) {
+        if (error && error.message === "login") {
+          marr.postMessage({ type: "marr-fix-error", message: "Not logged in to TimeMint" }, MARR);
+          say("MARR: ยังไม่ได้ login TimeMint กรุณา login แล้วกดอีกครั้ง");
+          return;
+        }
+        marr.postMessage({ type: "marr-ot-page", employee_id: emp.id, tables: null }, MARR);
       }
       await sleep(1000);
     }

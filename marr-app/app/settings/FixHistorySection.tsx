@@ -15,6 +15,7 @@ export default function FixHistorySection() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<FixHistoryEmployeeResult[]>([]);
+  const [otResults, setOtResults] = useState<FixHistoryEmployeeResult[]>([]);
 
   const bookmarkRef = useRef<HTMLAnchorElement>(null);
   const tabRef = useRef<Window | null>(null);
@@ -58,6 +59,22 @@ export default function FixHistorySection() {
       }
     }
 
+    async function saveOtPage(employeeId: number, tables: unknown): Promise<FixHistoryEmployeeResult> {
+      const failed = (message: string) => ({ employee_id: employeeId, ...nameOf(employeeId), saved: 0, skipped: 0, error: message });
+      if (!tables) return failed("Could not read this employee's OT page");
+      try {
+        const res = await fetch("/api/timemint/ot-history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ employee_id: employeeId, tables }),
+        });
+        const data = await res.json().catch(() => ({}));
+        return res.ok ? (data as FixHistoryEmployeeResult) : failed(data.error || "Could not save this employee's OT history");
+      } catch {
+        return failed("Could not save this employee's OT history");
+      }
+    }
+
     // Pages are saved one at a time, in the order they arrive.
     let queue: Promise<void> = Promise.resolve();
     const enqueue = (work: () => Promise<void> | void) => {
@@ -71,6 +88,7 @@ export default function FixHistorySection() {
         const { employees: all, selected: chosen } = latest.current;
         const picked = all.filter((e) => chosen.has(e.id)).map((e) => ({ id: e.id, emp_code: e.emp_code, name: e.name }));
         setResults([]);
+        setOtResults([]);
         setError(null);
         setRunning(picked.length > 0);
         tabRef.current.postMessage({ type: "marr-fix-employees", employees: picked }, TIMEMINT_ORIGIN);
@@ -79,6 +97,12 @@ export default function FixHistorySection() {
         enqueue(async () => {
           const result = await savePage(employeeId, data.tables);
           setResults((previous) => [...previous, result]);
+        });
+      } else if (data?.type === "marr-ot-page" && Number.isInteger(data.employee_id)) {
+        const employeeId = data.employee_id as number;
+        enqueue(async () => {
+          const result = await saveOtPage(employeeId, data.tables);
+          setOtResults((previous) => [...previous, result]);
         });
       } else if (data?.type === "marr-fix-done") {
         enqueue(() => setRunning(false));
@@ -112,10 +136,12 @@ export default function FixHistorySection() {
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm space-y-4">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">Time Adjustment History (TimeMint website)</h2>
+        <h2 className="text-base font-semibold text-gray-900">Time Adjustment &amp; OT History (TimeMint website)</h2>
         <p className="mt-1 text-sm text-gray-500">
-          Reads each selected employee&apos;s &quot;ประวัติปรับปรุงเวลา&quot; page in your own browser and saves it for the
-          Fixed Time Request report. Earlier records are kept. MARR doesn&apos;t see your TimeMint password.
+          Reads each selected employee&apos;s &quot;ประวัติปรับปรุงเวลา&quot; and &quot;การทำงานล่วงเวลา&quot; pages in your own
+          browser. Saves time adjustment records for the Fixed Time Request report, and each OT request&apos;s
+          &quot;เพิ่มเมื่อ&quot; (submission time, which TimeMint&apos;s API doesn&apos;t return) for the OT form. Earlier records
+          are kept. MARR doesn&apos;t see your TimeMint password.
         </p>
       </div>
 
@@ -177,14 +203,31 @@ export default function FixHistorySection() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {results.length > 0 && (
-        <ul className="space-y-1 text-sm">
-          {results.map((e) => (
-            <li key={e.employee_id} className={e.error ? "text-red-600" : "text-gray-700"}>
-              {e.name} ({e.emp_code}):{" "}
-              {e.error ?? `${e.saved} record(s) saved${e.skipped > 0 ? `, ${e.skipped} row(s) could not be read` : ""}`}
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-gray-600">Time adjustment history</p>
+          <ul className="space-y-1 text-sm">
+            {results.map((e) => (
+              <li key={e.employee_id} className={e.error ? "text-red-600" : "text-gray-700"}>
+                {e.name} ({e.emp_code}):{" "}
+                {e.error ?? `${e.saved} record(s) saved${e.skipped > 0 ? `, ${e.skipped} row(s) could not be read` : ""}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {otResults.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-gray-600">OT request submission time</p>
+          <ul className="space-y-1 text-sm">
+            {otResults.map((e) => (
+              <li key={e.employee_id} className={e.error ? "text-red-600" : "text-gray-700"}>
+                {e.name} ({e.emp_code}):{" "}
+                {e.error ?? `${e.saved} request(s) saved${e.skipped > 0 ? `, ${e.skipped} row(s) could not be read` : ""}`}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

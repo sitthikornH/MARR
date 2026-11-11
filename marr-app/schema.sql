@@ -98,6 +98,20 @@ CREATE TABLE IF NOT EXISTS overtime_request (
   INDEX idx_overtime_request_employee_date (employee_id, date)
 );
 
+-- "เพิ่มเมื่อ" (when the employee submitted the OT request): the Overtime API has no such field, so it's
+-- read from TimeMint's website (viewot.php) the same way as time_adjustment_request below. Kept in its
+-- own table, keyed on overtime_id, because the attendance import deletes and reinserts overtime_request
+-- rows on every run and would otherwise lose it.
+CREATE TABLE IF NOT EXISTS overtime_added_at (
+  overtime_id VARCHAR(50) NOT NULL PRIMARY KEY,
+  employee_id INT NOT NULL,
+  requested_at DATETIME NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_overtime_added_at_employee FOREIGN KEY (employee_id)
+    REFERENCES employees(id) ON DELETE CASCADE,
+  INDEX idx_overtime_added_at_employee (employee_id)
+);
+
 -- Time adjustment request history, from TimeMint's "Time Adjustment Request" report files (TimeMint
 -- has no API for these records). Same columns as the report; upserted on record_no, never deleted.
 CREATE TABLE IF NOT EXISTS time_adjustment_request (
