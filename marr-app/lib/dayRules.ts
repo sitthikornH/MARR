@@ -84,11 +84,14 @@ export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDa
     const longEnough = workedMinutes !== null && workedMinutes > MIN_WORKED_HOURS * 60;
     const tooShort = !isHoliday && workedMinutes !== null && !longEnough;
 
+    const checkInNote = ins.length === 0 ? "ไม่มีเวลาเข้างาน" : !isHoliday && lateCheckIn ? "สายเกิน 1 ชั่วโมง" : null;
+    const checkOutNote = outs.length === 0 ? "ไม่มีเวลาออกงาน" : !isHoliday && earlyCheckOut ? "ออกก่อน 13:00" : null;
+
     const notes = [
       holidayNote,
       ...leaves.map((l) => leaveLabel(l.notice)),
-      noCheckIn ? "no check-in" : null,
-      noCheckOut ? "no check-out" : null,
+      checkInNote,
+      checkOutNote,
       tooShort
         ? `worked ${formatDuration(Math.max(0, workedMinutes!))} excl. lunch (not more than ${MIN_WORKED_HOURS} h)`
         : null,
