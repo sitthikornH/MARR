@@ -177,6 +177,7 @@ export interface AllowanceReport {
   month: number;
   year: number;
   base_allowance: number; // site allowance per normal work day
+  work_shift: string; // "08:00-17:00" | "08:30-17:30" (lib/workShift.ts)
   days: AllowanceReportDay[];
   imported_days: number; // dates in the month that have attendance_report rows
 }

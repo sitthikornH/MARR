@@ -5,9 +5,9 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import HighlightLegend from "@/app/welfare/HighlightLegend";
 import { dayHighlight, PRINT_COLORS_CSS } from "@/lib/dayHighlight";
+import { workShiftLabel } from "@/lib/workShift";
 import type { AllowanceReport } from "@/lib/types";
 
-const RATE_TIERS = [350, 300, 250];
 const HOLIDAY_MULTIPLIER = 3.5; // 300/day -> 1,050/holiday, as on the paper form
 
 const money = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -67,7 +67,6 @@ function ReportView() {
     const site = d.site ?? "";
     allowanceBySite.set(site, (allowanceBySite.get(site) ?? 0) + 1);
   }
-  const tiers = RATE_TIERS.includes(dayRate) ? RATE_TIERS : [...RATE_TIERS, dayRate];
 
   // Running count shown at the right of the Time cell: 1, 2, ... for days counted in Total Day,
   // H1, H2, ... for days counted in Total Holiday.
@@ -166,16 +165,9 @@ function ReportView() {
             <table className="w-full border-collapse">
               <tbody>
                 <tr>
-                  <td className={`${cell} font-semibold`} colSpan={2}>
-                    Site Allowance - Stay Over Night
-                  </td>
+                  <td className={`${cell} w-28 font-semibold`}>เวลาทำงาน</td>
+                  <td className={cell}>{workShiftLabel(report.work_shift)}</td>
                 </tr>
-                {tiers.map((t) => (
-                  <tr key={t}>
-                    <td className={`${cell} w-10 text-center`}>{t === dayRate ? "✓" : ""}</td>
-                    <td className={cell}>THB {money(t)} / Day</td>
-                  </tr>
-                ))}
               </tbody>
             </table>
 
