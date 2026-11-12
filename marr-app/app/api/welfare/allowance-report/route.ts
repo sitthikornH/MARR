@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
 import { query, type RowDataPacket } from "@/lib/db";
 import { classifyMonth, type DayRuleRow } from "@/lib/dayRules";
+import { timeAdjustmentStatusKind } from "@/lib/timeAdjustmentStatus";
 import type { AllowanceReport, ApiError } from "@/lib/types";
 
 interface ReportRow extends RowDataPacket, DayRuleRow {
@@ -52,6 +53,16 @@ export async function GET(request: NextRequest): Promise<NextResponse<AllowanceR
 
     const days = classifyMonth(year, month, rows);
 
+    const fixRequests = await query<RowDataPacket[]>(
+      "SELECT date, status FROM time_adjustment_request WHERE employee_id = ? AND YEAR(date) = ? AND MONTH(date) = ?",
+      [employeeId, year, month]
+    );
+    const fixedTimeCounts: Record<string, number> = {};
+    for (const r of fixRequests) {
+      if (timeAdjustmentStatusKind(r.status) !== "approved") continue;
+      fixedTimeCounts[r.date] = (fixedTimeCounts[r.date] ?? 0) + 1;
+    }
+
     // Most frequent place among worked days is the form's "Site".
     const placeCounts = new Map<string, number>();
     for (const row of rows) {
@@ -79,6 +90,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<AllowanceR
       base_allowance: Number(employee.base_allowance),
       work_shift: employee.work_shift,
       days,
+      fixed_time_counts: fixedTimeCounts,
       imported_days: new Set(rows.map((r) => r.date)).size,
     };
     return NextResponse.json(report, { status: 200 });

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { timeAdjustmentStatusKind } from "@/lib/timeAdjustmentStatus";
 import type { FixedTimeRequestReport } from "@/lib/types";
 
 /** "2026-11-03" -> "03/11/2569" (Buddhist year, as on the other forms) */
@@ -18,9 +19,10 @@ const time = (t: string | null) => (t ? t.slice(0, 5) : "-");
 function statusView(status: string | null): { label: string; className: string } {
   const s = (status ?? "").trim();
   if (!s) return { label: "-", className: "text-gray-500" };
-  if (/reject|ไม่อนุมัติ/i.test(s)) return { label: "ไม่อนุมัติ", className: "text-red-600" };
-  if (/pending|รอ/i.test(s)) return { label: "รออนุมัติ", className: "text-amber-700" };
-  if (/approve|อนุมัติ/i.test(s)) return { label: "อนุมัติ", className: "text-green-700" };
+  const kind = timeAdjustmentStatusKind(status);
+  if (kind === "rejected") return { label: "ไม่อนุมัติ", className: "text-red-600" };
+  if (kind === "pending") return { label: "รออนุมัติ", className: "text-amber-700" };
+  if (kind === "approved") return { label: "อนุมัติ", className: "text-green-700" };
   return { label: s, className: "text-gray-700" };
 }
 

@@ -187,7 +187,14 @@ function ReportView() {
               <tbody>
                 {report.days.map((d, i) => (
                   <tr key={d.date} className={dayHighlight(d).bg}>
-                    <td className={`${cell} text-center`}>{formatDate(d.date)}</td>
+                    <td className={`${cell} relative pr-5 text-center`}>
+                      {formatDate(d.date)}
+                      {report.fixed_time_counts[d.date] > 0 && (
+                        <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-red-600">
+                          {report.fixed_time_counts[d.date]}
+                        </span>
+                      )}
+                    </td>
                     <td className={`${cell} relative text-center`}>
                       {d.recorded_time ?? ""}
                       {countLabels[i] && (
