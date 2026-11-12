@@ -8,9 +8,6 @@ import type { ApiError, WelfareCalculateRequest, WelfareCalculateResult } from "
 
 interface DayRuleRowPacket extends RowDataPacket, DayRuleRow {}
 
-const MIN_ALLOWANCE_HOURS = 4; // allowance needs more than 4h from first check-in to last check-out, excluding lunch
-const LUNCH_START_HOUR = 12; // 12:00-13:00 lunch break is not counted toward the 4h
-const LUNCH_END_HOUR = 13;
 interface EmployeeRow extends RowDataPacket {
   id: number;
   base_allowance: number;
@@ -38,19 +35,6 @@ interface OvertimeRow extends RowDataPacket {
   date: string;
   time_start: string;
   time_end: string;
-}
-
-function timeStringToHours(time: string): number {
-  const [h, m, s] = time.split(":").map(Number);
-  return h + m / 60 + (s ?? 0) / 3600;
-}
-
-/** Hours from check-in to check-out minus the part that falls inside the 12:00-13:00 lunch break. */
-function hoursExcludingLunch(timeIn: string, timeOut: string): number {
-  const start = timeStringToHours(timeIn);
-  const end = timeStringToHours(timeOut);
-  const lunch = Math.max(0, Math.min(end, LUNCH_END_HOUR) - Math.max(start, LUNCH_START_HOUR));
-  return end - start - lunch;
 }
 
 export async function POST(
@@ -110,15 +94,11 @@ export async function POST(
       [employeeId, yearNum, monthNum]
     );
 
-    // Rule 1: Allowance - valid days have both time_in and time_out, and no leave_type; a day
-    // only earns allowance if first check-in to last check-out is more than MIN_ALLOWANCE_HOURS.
+    // Rule 1: Allowance - valid days have both time_in and time_out, and no leave_type.
     const validDays = attendanceRows.filter(
       (row) => row.time_in !== null && row.time_out !== null && row.leave_type === null
     );
-    const allowanceDays = validDays.filter(
-      (row) => hoursExcludingLunch(row.time_in as string, row.time_out as string) > MIN_ALLOWANCE_HOURS
-    );
-    const totalAllowance = allowanceDays.length * Number(employee.base_allowance);
+    const totalAllowance = validDays.length * Number(employee.base_allowance);
 
     // Rule 2: Travel fee - sum travel_fee for every record whose location matches location_rates.
     const totalTravel = attendanceRows.reduce(

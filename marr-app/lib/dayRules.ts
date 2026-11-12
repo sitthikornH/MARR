@@ -18,26 +18,11 @@ export interface DayRuleRow {
 
 const LATE_LIMIT_MINUTES = 60;
 const EARLY_CHECKOUT_BEFORE = "13:00:00";
-const MIN_WORKED_HOURS = 4;
-const LUNCH_START = 12 * 60;
-const LUNCH_END = 13 * 60;
 
 /** "08:30:00" -> 510 */
 function minutesOf(time: string): number {
   const [h, m, s] = time.split(":").map(Number);
   return h * 60 + m + (s ?? 0) / 60;
-}
-
-function minutesExcludingLunch(timeIn: string, timeOut: string): number {
-  const start = minutesOf(timeIn);
-  const end = minutesOf(timeOut);
-  return end - start - Math.max(0, Math.min(end, LUNCH_END) - Math.max(start, LUNCH_START));
-}
-
-/** 200 -> "3:20 h" */
-function formatDuration(minutes: number): string {
-  const m = Math.floor(minutes);
-  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h`;
 }
 
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : null);
@@ -49,11 +34,10 @@ const leaveLabel = (notice: string | null) => (notice?.includes("|") ? notice.sp
  * Classifies one calendar day from its attendance_report rows.
  *
  * Allowance (kind "work"): on a workday, the check-in must exist and be at most 1h after the start
- * of work, the check-out must exist and be at 13:00 or later, and first check-in to last check-out
- * minus the 12:00-13:00 lunch break must be more than 4h. Otherwise the day is "uncounted".
+ * of work, and the check-out must exist and be at 13:00 or later. Otherwise the day is "uncounted".
  *
  * Work day (work_day, used by the return-home bonus): a counted workday ("work"), or a worked
- * holiday with both a check-in and a check-out and more than 4h excluding lunch.
+ * holiday with both a check-in and a check-out.
  */
 export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDay {
   if (rows.length === 0)
@@ -80,24 +64,16 @@ export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDa
     const earlyCheckOut = lastOut !== undefined && lastOut < EARLY_CHECKOUT_BEFORE;
     const noCheckIn = ins.length === 0 || (!isHoliday && lateCheckIn);
     const noCheckOut = outs.length === 0 || (!isHoliday && earlyCheckOut);
-    const workedMinutes = ins.length > 0 && lastOut !== undefined ? minutesExcludingLunch(ins[0], lastOut) : null;
-    const longEnough = workedMinutes !== null && workedMinutes > MIN_WORKED_HOURS * 60;
-    const tooShort = !isHoliday && workedMinutes !== null && !longEnough;
+    const hasBothTimes = ins.length > 0 && lastOut !== undefined;
 
     const checkInNote = ins.length === 0 ? "ไม่มีเวลาเข้างาน" : !isHoliday && lateCheckIn ? "สายเกิน 1 ชั่วโมง" : null;
     const checkOutNote = outs.length === 0 ? "ไม่มีเวลาออกงาน" : !isHoliday && earlyCheckOut ? "ออกก่อน 13:00" : null;
 
-    const notes = [
-      holidayNote,
-      ...leaves.map((l) => leaveLabel(l.notice)),
-      checkInNote,
-      checkOutNote,
-      tooShort
-        ? `worked ${formatDuration(Math.max(0, workedMinutes!))} excl. lunch (not more than ${MIN_WORKED_HOURS} h)`
-        : null,
-    ].filter((n): n is string => !!n);
+    const notes = [holidayNote, ...leaves.map((l) => leaveLabel(l.notice)), checkInNote, checkOutNote].filter(
+      (n): n is string => !!n
+    );
 
-    const kind = isHoliday ? "holiday_work" : noCheckIn || noCheckOut || tooShort ? "uncounted" : "work";
+    const kind = isHoliday ? "holiday_work" : noCheckIn || noCheckOut ? "uncounted" : "work";
     return {
       date,
       kind,
@@ -105,7 +81,7 @@ export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDa
       recorded_time: recordedTime,
       site: places.join(", ") || null,
       note: notes.join("; ") || null,
-      work_day: kind === "work" || (kind === "holiday_work" && longEnough),
+      work_day: kind === "work" || (kind === "holiday_work" && hasBothTimes),
       company_holiday: companyHoliday,
     };
   }
