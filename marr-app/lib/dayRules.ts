@@ -56,10 +56,11 @@ const leaveLabel = (notice: string | null) => (notice?.includes("|") ? notice.sp
  * holiday with both a check-in and a check-out and more than 4h excluding lunch.
  */
 export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDay {
-  if (rows.length === 0) return { date, time: null, site: null, note: null, work_day: false, company_holiday: false, kind: "none" };
+  if (rows.length === 0)
+    return { date, time: null, recorded_time: null, site: null, note: null, work_day: false, company_holiday: false, kind: "none" };
 
   const companyHoliday = rows[0].day_type === "company_holiday";
-  const empty = { date, time: null, site: null, note: null, work_day: false, company_holiday: companyHoliday };
+  const empty = { date, time: null, recorded_time: null, site: null, note: null, work_day: false, company_holiday: companyHoliday };
   const isHoliday = rows[0].day_type !== "workday";
   const holidayNote = rows[0].day_type === "company_holiday" ? rows[0].holiday_name || "Company holiday" : null;
   const logs = rows.filter((r) => r.row_type === "checklog");
@@ -69,9 +70,8 @@ export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDa
     const ins = logs.map((r) => r.time_in).filter((t): t is string => !!t).sort();
     const outs = logs.map((r) => r.time_out).filter((t): t is string => !!t).sort();
     const shift = rows[0].start_work_at && rows[0].get_off_work_at;
-    const time = shift
-      ? `${hhmm(rows[0].start_work_at)}-${hhmm(rows[0].get_off_work_at)}`
-      : `${hhmm(ins[0] ?? null) ?? "?"}-${hhmm(outs[outs.length - 1] ?? null) ?? "?"}`;
+    const recordedTime = `${hhmm(ins[0] ?? null) ?? "?"}-${hhmm(outs[outs.length - 1] ?? null) ?? "?"}`;
+    const time = shift ? `${hhmm(rows[0].start_work_at)}-${hhmm(rows[0].get_off_work_at)}` : recordedTime;
     const places = [...new Set(logs.map((r) => r.place).filter((p): p is string => !!p))];
 
     const start = rows[0].start_work_at;
@@ -99,6 +99,7 @@ export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDa
       date,
       kind,
       time,
+      recorded_time: recordedTime,
       site: places.join(", ") || null,
       note: notes.join("; ") || null,
       work_day: kind === "work" || (kind === "holiday_work" && longEnough),

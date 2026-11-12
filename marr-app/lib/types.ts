@@ -158,7 +158,8 @@ export type AllowanceDayKind = "work" | "uncounted" | "holiday_work" | "leave" |
 export interface AllowanceReportDay {
   date: string;
   kind: AllowanceDayKind;
-  time: string | null; // "08:00-17:00"
+  time: string | null; // "08:00-17:00" (the day's shift, or the recorded time when no shift is set)
+  recorded_time: string | null; // "07:30-11:58" actual first check-in to last check-out, regardless of shift
   site: string | null; // places, leave type, or "X" for a holiday off
   note: string | null; // holiday name, hourly leave, incomplete check-in/out
   work_day: boolean; // counts as a work day for the return-home bonus (lib/dayRules.ts)

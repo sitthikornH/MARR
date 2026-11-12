@@ -189,7 +189,7 @@ function ReportView() {
                   <tr key={d.date} className={dayHighlight(d).bg}>
                     <td className={`${cell} text-center`}>{formatDate(d.date)}</td>
                     <td className={`${cell} relative text-center`}>
-                      {d.time ?? ""}
+                      {d.recorded_time ?? ""}
                       {countLabels[i] && (
                         <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] font-semibold">
                           {countLabels[i]}
