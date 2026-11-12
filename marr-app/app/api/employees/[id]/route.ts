@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import { isReturnHomeOption, RETURN_HOME_ERROR } from "@/lib/returnHome";
+import { isWorkShiftOption, WORK_SHIFT_ERROR } from "@/lib/workShift";
 import type { ApiError, Employee, EmployeeRatesUpdate } from "@/lib/types";
 
 interface RouteParams {
@@ -24,7 +25,7 @@ export async function GET(
     if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
 
     const rows = await query<RowDataPacket[]>(
-      "SELECT id, emp_code, name, base_allowance, base_ot_rate, return_home_rate, created_at FROM employees WHERE id = ?",
+      "SELECT id, emp_code, name, base_allowance, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
       [employeeId]
     );
 
@@ -71,11 +72,15 @@ export async function PUT(
     if (!isReturnHomeOption(body.return_home_rate)) {
       return NextResponse.json({ error: RETURN_HOME_ERROR }, { status: 400 });
     }
+    if (!isWorkShiftOption(body.work_shift)) {
+      return NextResponse.json({ error: WORK_SHIFT_ERROR }, { status: 400 });
+    }
     const [baseAllowance, baseOtRate, returnHomeRate] = rates as number[];
+    const workShift: string = body.work_shift;
 
     const result = await execute(
-      "UPDATE employees SET base_allowance = ?, base_ot_rate = ?, return_home_rate = ? WHERE id = ?",
-      [baseAllowance, baseOtRate, returnHomeRate, employeeId]
+      "UPDATE employees SET base_allowance = ?, base_ot_rate = ?, return_home_rate = ?, work_shift = ? WHERE id = ?",
+      [baseAllowance, baseOtRate, returnHomeRate, workShift, employeeId]
     );
 
     if (result.affectedRows === 0) {
@@ -83,7 +88,7 @@ export async function PUT(
     }
 
     const rows = await query<RowDataPacket[]>(
-      "SELECT id, emp_code, name, base_allowance, base_ot_rate, return_home_rate, created_at FROM employees WHERE id = ?",
+      "SELECT id, emp_code, name, base_allowance, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
       [employeeId]
     );
     return NextResponse.json(rows[0] as Employee, { status: 200 });

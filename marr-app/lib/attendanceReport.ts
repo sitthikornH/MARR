@@ -10,6 +10,7 @@ import {
   type TimeMintShift,
 } from "@/lib/timemint";
 import type { AttendanceDayType, AttendanceReportRow, ImportedAttendanceDay } from "@/lib/types";
+import { isWorkShiftOption, parseWorkShift } from "@/lib/workShift";
 
 const LOCATION_MAX = 100; // attendance.location_name VARCHAR(100)
 const LEAVE_TYPE_MAX = 50; // attendance.leave_type VARCHAR(50)
@@ -27,6 +28,9 @@ export interface ReportSources {
   dateStart: string;
   dateEnd: string;
   today: string;
+  // employees.work_shift ("08:00-17:00" | "08:30-17:30"): when set, overrides TimeMint's own shift
+  // and the EmpWorkTime fallback below for this employee's late check-in / early check-out rules.
+  workShift?: string | null;
 }
 
 export interface BuiltReport {
@@ -85,6 +89,8 @@ export function buildAttendanceReport(src: ReportSources): BuiltReport {
     defaultStart && profile?.WorkHoursPerDay
       ? addHours(defaultStart, Number(profile.WorkHoursPerDay) + (profile.EmpBreakTime ? 1 : 0))
       : null;
+  // employees.work_shift, when set, overrides both the day's TimeMint shift and the default above.
+  const manualShift = isWorkShiftOption(src.workShift) ? parseWorkShift(src.workShift) : null;
 
   const shiftByDate = new Map(src.shifts.map((s) => [s.ShiftDate, s]));
   const weekly = new Set(src.weeklyHolidays.map((h) => h.Date));
@@ -122,8 +128,20 @@ export function buildAttendanceReport(src: ReportSources): BuiltReport {
   for (let date = src.dateStart; date <= src.dateEnd; date = addDays(date, 1)) {
     const shift = shiftByDate.get(date);
     const isHoliday = weekly.has(date) || annual.has(date);
-    const workStart = isHoliday ? null : shift?.ShiftDisplayStartWorkTime ? hhmmss(shift.ShiftDisplayStartWorkTime) : defaultStart;
-    const workEnd = isHoliday ? null : shift?.ShiftDisplayEndWorkTime ? hhmmss(shift.ShiftDisplayEndWorkTime) : defaultEnd;
+    const workStart = isHoliday
+      ? null
+      : manualShift
+        ? manualShift.start
+        : shift?.ShiftDisplayStartWorkTime
+          ? hhmmss(shift.ShiftDisplayStartWorkTime)
+          : defaultStart;
+    const workEnd = isHoliday
+      ? null
+      : manualShift
+        ? manualShift.end
+        : shift?.ShiftDisplayEndWorkTime
+          ? hhmmss(shift.ShiftDisplayEndWorkTime)
+          : defaultEnd;
 
     const base = {
       emp_code: src.empCode,

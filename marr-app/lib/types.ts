@@ -5,6 +5,7 @@ export interface Employee {
   base_allowance: number;
   base_ot_rate: number;
   return_home_rate: number;
+  work_shift: string; // "08:00-17:00" | "08:30-17:30" (lib/workShift.ts) - used for late check-in
   created_at: string;
   // Login account, only in the admin listing (GET /api/employees); null = no account yet
   account?: EmployeeAccount | null;
@@ -19,10 +20,13 @@ export interface EmployeeAccount {
 
 export type NewEmployee = Pick<
   Employee,
-  "emp_code" | "name" | "base_allowance" | "base_ot_rate" | "return_home_rate"
+  "emp_code" | "name" | "base_allowance" | "base_ot_rate" | "return_home_rate" | "work_shift"
 >;
 
-export type EmployeeRatesUpdate = Pick<Employee, "base_allowance" | "base_ot_rate" | "return_home_rate">;
+export type EmployeeRatesUpdate = Pick<
+  Employee,
+  "base_allowance" | "base_ot_rate" | "return_home_rate" | "work_shift"
+>;
 
 export interface LocationRate {
   id: number;

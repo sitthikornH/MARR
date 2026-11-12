@@ -46,14 +46,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<TimeMintI
   }
 
   try {
-    const employees = await query<RowDataPacket[]>("SELECT emp_code FROM employees WHERE id = ?", [employeeId]);
+    const employees = await query<RowDataPacket[]>("SELECT emp_code, work_shift FROM employees WHERE id = ?", [employeeId]);
     if (employees.length === 0) {
       return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
     const empCode: string = employees[0].emp_code;
 
     const sources = await fetchSources({ empId: empCode }, dateStart, dateEnd);
-    const built = buildForEmployee(sources, empCode, dateStart, dateEnd);
+    const built = buildForEmployee(sources, empCode, dateStart, dateEnd, employees[0].work_shift);
     const warnings = [...sources.warnings, ...built.warnings];
 
     const knownLocations = await query<RowDataPacket[]>("SELECT location_name FROM location_rates");

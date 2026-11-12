@@ -78,7 +78,13 @@ export async function fetchSources(scope: Scope, dateStart: string, dateEnd: str
 }
 
 /** Builds one employee's report rows and daily attendance from fetched sources. */
-export function buildForEmployee(sources: Sources, empCode: string, dateStart: string, dateEnd: string): BuiltReport {
+export function buildForEmployee(
+  sources: Sources,
+  empCode: string,
+  dateStart: string,
+  dateEnd: string,
+  workShift?: string | null
+): BuiltReport {
   return buildAttendanceReport({
     empCode,
     profile: sources.profiles.get(empCode) ?? null,
@@ -91,6 +97,7 @@ export function buildForEmployee(sources: Sources, empCode: string, dateStart: s
     dateStart,
     dateEnd,
     today: localToday(),
+    workShift,
   });
 }
 
@@ -203,7 +210,7 @@ export async function runCompanyImport(dateStart: string, dateEnd: string): Prom
 
   try {
     const sources = await fetchSources("company", dateStart, dateEnd);
-    const employees = await query<RowDataPacket[]>("SELECT id, emp_code, name FROM employees ORDER BY id");
+    const employees = await query<RowDataPacket[]>("SELECT id, emp_code, name, work_shift FROM employees ORDER BY id");
     const timemintCodes = new Set([...sources.profiles.keys(), ...sources.checkLogs.keys()]);
 
     const result: CompanyImportResult = {
@@ -225,7 +232,7 @@ export async function runCompanyImport(dateStart: string, dateEnd: string): Prom
           result.not_in_timemint.push(empCode);
           continue;
         }
-        const built = buildForEmployee(sources, empCode, dateStart, dateEnd);
+        const built = buildForEmployee(sources, empCode, dateStart, dateEnd, emp.work_shift);
         const otList = forEmployee(sources.overtimes, empCode);
         await saveEmployeeImport(connection, emp.id, dateStart, dateEnd, built, otList, sources.overtimesFetched);
         result.employees.push({

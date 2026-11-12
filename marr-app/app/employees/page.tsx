@@ -2,15 +2,17 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { isReturnHomeOption, RETURN_HOME_OPTIONS, returnHomeLabel } from "@/lib/returnHome";
+import { DEFAULT_WORK_SHIFT, isWorkShiftOption, workShiftLabel, WORK_SHIFT_OPTIONS } from "@/lib/workShift";
 import type { Employee, EmployeeAccount, EmployeeRatesUpdate, NewEmployee, UserRole } from "@/lib/types";
 
-const RATE_FIELDS: (keyof EmployeeRatesUpdate)[] = ["base_allowance", "base_ot_rate", "return_home_rate"];
+const RATE_FIELDS: (keyof EmployeeRatesUpdate)[] = ["base_allowance", "base_ot_rate", "return_home_rate", "work_shift"];
 
 function ratesOf(employee: Employee): EmployeeRatesUpdate {
   return {
     base_allowance: Number(employee.base_allowance),
     base_ot_rate: Number(employee.base_ot_rate),
     return_home_rate: Number(employee.return_home_rate),
+    work_shift: employee.work_shift,
   };
 }
 
@@ -20,6 +22,7 @@ const EMPTY_FORM: NewEmployee = {
   base_allowance: 0,
   base_ot_rate: 0,
   return_home_rate: 0,
+  work_shift: DEFAULT_WORK_SHIFT,
 };
 
 export default function EmployeesPage() {
@@ -97,19 +100,24 @@ export default function EmployeesPage() {
     return RATE_FIELDS.some((f) => edited[f] !== original[f]);
   }
 
-  function setRate(employee: Employee, field: keyof EmployeeRatesUpdate, value: number) {
+  function setRate(employee: Employee, field: keyof EmployeeRatesUpdate, value: number | string) {
     setUpdatedId(null);
     setEdits({ ...edits, [employee.id]: { ...editedRates(employee), [field]: value } });
   }
 
   async function handleUpdate(employee: Employee) {
     const rates = editedRates(employee);
-    if (RATE_FIELDS.some((f) => !Number.isFinite(rates[f]) || rates[f] < 0)) {
+    const numericFields = RATE_FIELDS.filter((f) => f !== "work_shift") as (keyof EmployeeRatesUpdate)[];
+    if (numericFields.some((f) => !Number.isFinite(rates[f]) || (rates[f] as number) < 0)) {
       setError("Rates must be numbers of 0 or more.");
       return;
     }
     if (!isReturnHomeOption(rates.return_home_rate)) {
       setError(`${employee.emp_code}: please choose a Return Home option.`);
+      return;
+    }
+    if (!isWorkShiftOption(rates.work_shift)) {
+      setError(`${employee.emp_code}: please choose a Time In-Out option.`);
       return;
     }
 
@@ -269,6 +277,20 @@ export default function EmployeesPage() {
               ))}
             </select>
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Time In-Out</label>
+            <select
+              value={form.work_shift}
+              onChange={(e) => setForm({ ...form, work_shift: e.target.value })}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+            >
+              {WORK_SHIFT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="sm:col-span-2 lg:col-span-5 flex items-center gap-3">
             <button
               type="submit"
@@ -295,6 +317,7 @@ export default function EmployeesPage() {
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Allowance</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">OT Rate</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Return Home</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Time In-Out</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Login</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
               </tr>
@@ -302,21 +325,21 @@ export default function EmployeesPage() {
             <tbody className="divide-y divide-gray-100">
               {loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                     Loading employees...
                   </td>
                 </tr>
               )}
               {!loading && error && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-red-600">
+                  <td colSpan={8} className="px-4 py-6 text-center text-red-600">
                     {error}
                   </td>
                 </tr>
               )}
               {!loading && !error && employees.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                     No employees yet.
                   </td>
                 </tr>
@@ -347,13 +370,32 @@ export default function EmployeesPage() {
                             ))}
                           </select>
                         </td>
+                      ) : field === "work_shift" ? (
+                        <td key={field} className="px-4 py-2 text-right">
+                          <select
+                            value={editedRates(employee).work_shift}
+                            onChange={(e) => setRate(employee, field, e.target.value)}
+                            className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                          >
+                            {!isWorkShiftOption(editedRates(employee).work_shift) && (
+                              <option value={editedRates(employee).work_shift} disabled>
+                                {workShiftLabel(editedRates(employee).work_shift)}
+                              </option>
+                            )}
+                            {WORK_SHIFT_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
                       ) : (
                       <td key={field} className="px-4 py-2 text-right">
                         <input
                           type="number"
                           step="0.01"
                           min="0"
-                          value={editedRates(employee)[field]}
+                          value={editedRates(employee)[field] as number}
                           onChange={(e) => setRate(employee, field, Number(e.target.value))}
                           className="w-28 rounded-md border border-gray-300 px-2 py-1 text-right text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-400"
                         />

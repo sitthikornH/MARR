@@ -11,8 +11,11 @@ CREATE TABLE IF NOT EXISTS employees (
   base_allowance DECIMAL(10,2) NOT NULL DEFAULT 0,
   base_ot_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
   return_home_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
+  work_shift VARCHAR(11) NOT NULL DEFAULT '08:00-17:00', -- "08:00-17:00" | "08:30-17:30" (lib/workShift.ts)
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- Upgrade for databases whose employees predates work_shift (run once):
+-- ALTER TABLE employees ADD COLUMN work_shift VARCHAR(11) NOT NULL DEFAULT '08:00-17:00' AFTER return_home_rate;
 
 CREATE TABLE IF NOT EXISTS location_rates (
   id INT AUTO_INCREMENT PRIMARY KEY,
