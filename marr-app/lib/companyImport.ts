@@ -23,7 +23,9 @@ import {
   type TimeMintOvertime,
   type TimeMintShift,
 } from "@/lib/timemint";
-import type { CompanyImportResult, SyncStatus } from "@/lib/types";
+import type { CompanyHoliday, CompanyImportResult, SyncStatus } from "@/lib/types";
+
+interface HolidayRow extends RowDataPacket, CompanyHoliday {}
 
 export function localToday(): string {
   const d = new Date();
@@ -45,6 +47,7 @@ export interface Sources {
   shifts: ByEmployee<TimeMintShift>;
   weeklyHolidays: ByEmployee<TimeMintDatedHoliday>;
   annualHolidays: ByEmployee<TimeMintDatedHoliday>;
+  companyHolidays: CompanyHoliday[]; // company-wide, overrides annualHolidays for the same date
   warnings: string[];
 }
 
@@ -74,7 +77,11 @@ export async function fetchSources(scope: Scope, dateStart: string, dateEnd: str
   const shifts = await optional("Shifts", new Map(), warnings, () => fetchShifts(scope, dateStart, dateEnd));
   const weeklyHolidays = await optional("Weekly holidays", new Map(), warnings, () => fetchWeeklyHolidays(scope, dateStart, dateEnd));
   const annualHolidays = await optional("Annual holidays", new Map(), warnings, () => fetchAnnualHolidays(scope, dateStart, dateEnd));
-  return { profiles, checkLogs, leaves, overtimes, overtimesFetched, shifts, weeklyHolidays, annualHolidays, warnings };
+  const companyHolidays = await query<HolidayRow[]>(
+    "SELECT date, name FROM company_holidays WHERE date BETWEEN ? AND ?",
+    [dateStart, dateEnd]
+  );
+  return { profiles, checkLogs, leaves, overtimes, overtimesFetched, shifts, weeklyHolidays, annualHolidays, companyHolidays, warnings };
 }
 
 /** Builds one employee's report rows and daily attendance from fetched sources. */
@@ -94,6 +101,7 @@ export function buildForEmployee(
     shifts: forEmployee(sources.shifts, empCode),
     weeklyHolidays: forEmployee(sources.weeklyHolidays, empCode),
     annualHolidays: forEmployee(sources.annualHolidays, empCode),
+    companyHolidays: sources.companyHolidays,
     dateStart,
     dateEnd,
     today: localToday(),

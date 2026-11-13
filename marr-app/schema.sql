@@ -17,6 +17,14 @@ CREATE TABLE IF NOT EXISTS employees (
 -- Upgrade for databases whose employees predates work_shift (run once):
 -- ALTER TABLE employees ADD COLUMN work_shift VARCHAR(11) NOT NULL DEFAULT '08:00-17:00' AFTER return_home_rate;
 
+-- The company's own declared holiday calendar (e.g. the yearly ENSYS announcement), overriding
+-- TimeMint's own annual holiday data for the same date when building attendance_report.
+CREATE TABLE IF NOT EXISTS company_holidays (
+  date DATE NOT NULL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS location_rates (
   id INT AUTO_INCREMENT PRIMARY KEY,
   location_name VARCHAR(100) NOT NULL UNIQUE,

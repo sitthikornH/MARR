@@ -34,6 +34,12 @@ export interface LocationRate {
   travel_fee: number;
 }
 
+/** The company's own declared holiday calendar, overriding TimeMint's own on the same date. */
+export interface CompanyHoliday {
+  date: string; // "2026-01-01"
+  name: string;
+}
+
 export type LeaveType = string;
 
 export interface Attendance {

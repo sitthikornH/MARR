@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AppSettings, EmployeeSyncResult } from "@/lib/types";
 import AutoImportSection from "./AutoImportSection";
+import CompanyHolidaysSection from "./CompanyHolidaysSection";
 import FixHistorySection from "./FixHistorySection";
 import LoginHistorySection from "./LoginHistorySection";
 
@@ -184,6 +185,8 @@ export default function SettingsPage() {
       {settings && (
         <AutoImportSection settings={settings} intervals={INTERVAL_LABELS} onSaved={applySettings} onReload={loadSettings} />
       )}
+
+      <CompanyHolidaysSection />
 
       <FixHistorySection />
 

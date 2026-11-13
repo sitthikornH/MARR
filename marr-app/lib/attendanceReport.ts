@@ -9,7 +9,7 @@ import {
   type TimeMintOvertime,
   type TimeMintShift,
 } from "@/lib/timemint";
-import type { AttendanceDayType, AttendanceReportRow, ImportedAttendanceDay } from "@/lib/types";
+import type { AttendanceDayType, AttendanceReportRow, CompanyHoliday, ImportedAttendanceDay } from "@/lib/types";
 import { isWorkShiftOption, parseWorkShift } from "@/lib/workShift";
 
 const LOCATION_MAX = 100; // attendance.location_name VARCHAR(100)
@@ -25,6 +25,9 @@ export interface ReportSources {
   shifts: TimeMintShift[];
   weeklyHolidays: TimeMintDatedHoliday[];
   annualHolidays: TimeMintDatedHoliday[];
+  // The company's own declared holiday calendar (company_holidays table), overriding annualHolidays
+  // for the same date — it is company-wide, not per-employee, unlike the other sources here.
+  companyHolidays?: CompanyHoliday[];
   dateStart: string;
   dateEnd: string;
   today: string;
@@ -95,6 +98,7 @@ export function buildAttendanceReport(src: ReportSources): BuiltReport {
   const shiftByDate = new Map(src.shifts.map((s) => [s.ShiftDate, s]));
   const weekly = new Set(src.weeklyHolidays.map((h) => h.Date));
   const annual = new Map(src.annualHolidays.map((h) => [h.Date, h.DateINFO ?? ""]));
+  for (const h of src.companyHolidays ?? []) annual.set(h.date, h.name);
 
   const logsByDate = new Map<string, TimeMintCheckLog[]>();
   for (const log of src.checkLogs) {
