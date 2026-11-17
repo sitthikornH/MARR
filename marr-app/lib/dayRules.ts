@@ -36,9 +36,9 @@ const leaveLabel = (notice: string | null) => (notice?.includes("|") ? notice.sp
  * Allowance (kind "work"): on a workday, the check-in must exist and be at most 1h after the start
  * of work, and the check-out must exist and be at 13:00 or later. Otherwise the day is "uncounted".
  *
- * Work day (work_day, used by the return-home bonus): a counted workday ("work"), a worked holiday
- * with both a check-in and a check-out, or any company holiday (worked or not — a free day, per
- * the user).
+ * Work day (work_day, used by the return-home bonus): a counted workday ("work") or any company
+ * holiday (worked or not — a free day, per the user). Working on a plain weekly holiday (e.g.
+ * Sunday) does not earn this credit, per the user.
  */
 export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDay {
   if (rows.length === 0)
@@ -65,7 +65,6 @@ export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDa
     const earlyCheckOut = lastOut !== undefined && lastOut < EARLY_CHECKOUT_BEFORE;
     const noCheckIn = ins.length === 0 || (!isHoliday && lateCheckIn);
     const noCheckOut = outs.length === 0 || (!isHoliday && earlyCheckOut);
-    const hasBothTimes = ins.length > 0 && lastOut !== undefined;
 
     const checkInNote = ins.length === 0 ? "ไม่มีเวลาเข้างาน" : !isHoliday && lateCheckIn ? "สายเกิน 1 ชั่วโมง" : null;
     const checkOutNote = outs.length === 0 ? "ไม่มีเวลาออกงาน" : !isHoliday && earlyCheckOut ? "ออกก่อน 13:00" : null;
@@ -82,7 +81,7 @@ export function classifyDay(date: string, rows: DayRuleRow[]): AllowanceReportDa
       recorded_time: recordedTime,
       site: places.join(", ") || null,
       note: notes.join("; ") || null,
-      work_day: kind === "work" || (kind === "holiday_work" && hasBothTimes) || companyHoliday,
+      work_day: kind === "work" || companyHoliday,
       company_holiday: companyHoliday,
     };
   }
