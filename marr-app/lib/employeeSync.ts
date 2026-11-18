@@ -8,11 +8,13 @@ import type { AppSettings, EmployeeSyncResult, SyncStatus } from "@/lib/types";
 // which is why this module imports lib/db directly.
 
 export const SYNC_INTERVAL_OPTIONS = [15, 30, 60, 180, 360, 720, 1440];
+// Hour of day (server local time) the daily auto import can be scheduled at: 0-23.
+export const IMPORT_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => hour);
 
 export async function getSettings(): Promise<AppSettings> {
   const rows = await query<RowDataPacket[]>(
     `SELECT auto_sync_enabled, sync_interval_minutes, last_sync_at, last_sync_status, last_sync_message,
-            auto_import_enabled, import_interval_minutes, last_import_at, last_import_status, last_import_message
+            auto_import_enabled, import_hour, last_import_at, last_import_status, last_import_message
      FROM app_settings WHERE id = 1`
   );
   const row = rows[0];
@@ -24,7 +26,7 @@ export async function getSettings(): Promise<AppSettings> {
       last_sync_status: null,
       last_sync_message: null,
       auto_import_enabled: false,
-      import_interval_minutes: 1440,
+      import_hour: 1,
       last_import_at: null,
       last_import_status: null,
       last_import_message: null,
@@ -37,7 +39,7 @@ export async function getSettings(): Promise<AppSettings> {
     last_sync_status: row.last_sync_status,
     last_sync_message: row.last_sync_message,
     auto_import_enabled: Boolean(row.auto_import_enabled),
-    import_interval_minutes: Number(row.import_interval_minutes),
+    import_hour: Number(row.import_hour),
     last_import_at: row.last_import_at,
     last_import_status: row.last_import_status,
     last_import_message: row.last_import_message,

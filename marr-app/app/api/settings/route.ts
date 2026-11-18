@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { execute } from "@/lib/db";
-import { getSettings, SYNC_INTERVAL_OPTIONS } from "@/lib/employeeSync";
+import { getSettings, IMPORT_HOUR_OPTIONS, SYNC_INTERVAL_OPTIONS } from "@/lib/employeeSync";
 import type { ApiError, AppSettings, AppSettingsUpdate } from "@/lib/types";
 
 export async function GET(request: NextRequest): Promise<NextResponse<AppSettings | ApiError>> {
@@ -20,9 +20,9 @@ export async function PUT(request: NextRequest): Promise<NextResponse<AppSetting
   if ("response" in gate) return gate.response;
   try {
     const body = (await request.json()) as AppSettingsUpdate;
-    const { auto_sync_enabled, sync_interval_minutes, auto_import_enabled, import_interval_minutes } = body;
+    const { auto_sync_enabled, sync_interval_minutes, auto_import_enabled, import_hour } = body;
     const hasSync = auto_sync_enabled !== undefined || sync_interval_minutes !== undefined;
-    const hasImport = auto_import_enabled !== undefined || import_interval_minutes !== undefined;
+    const hasImport = auto_import_enabled !== undefined || import_hour !== undefined;
 
     if (!hasSync && !hasImport) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
@@ -33,9 +33,9 @@ export async function PUT(request: NextRequest): Promise<NextResponse<AppSetting
         { status: 400 }
       );
     }
-    if (hasImport && (typeof auto_import_enabled !== "boolean" || !SYNC_INTERVAL_OPTIONS.includes(Number(import_interval_minutes)))) {
+    if (hasImport && (typeof auto_import_enabled !== "boolean" || !IMPORT_HOUR_OPTIONS.includes(Number(import_hour)))) {
       return NextResponse.json(
-        { error: `auto_import_enabled (boolean) and import_interval_minutes (one of ${SYNC_INTERVAL_OPTIONS.join(", ")}) are required` },
+        { error: `auto_import_enabled (boolean) and import_hour (one of ${IMPORT_HOUR_OPTIONS.join(", ")}) are required` },
         { status: 400 }
       );
     }
@@ -48,8 +48,8 @@ export async function PUT(request: NextRequest): Promise<NextResponse<AppSetting
     }
     if (hasImport) {
       const enabled: number = auto_import_enabled ? 1 : 0;
-      const interval: number = Number(import_interval_minutes);
-      await execute("UPDATE app_settings SET auto_import_enabled = ?, import_interval_minutes = ? WHERE id = 1", [enabled, interval]);
+      const hour: number = Number(import_hour);
+      await execute("UPDATE app_settings SET auto_import_enabled = ?, import_hour = ? WHERE id = 1", [enabled, hour]);
     }
 
     return NextResponse.json(await getSettings(), { status: 200 });

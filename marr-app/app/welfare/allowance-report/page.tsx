@@ -8,8 +8,6 @@ import { dayHighlight, PRINT_COLORS_CSS } from "@/lib/dayHighlight";
 import { workShiftLabel } from "@/lib/workShift";
 import type { AllowanceReport } from "@/lib/types";
 
-const HOLIDAY_MULTIPLIER = 3.5; // 300/day -> 1,050/holiday, as on the paper form
-
 const money = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** "2026-07-04" -> "04/07/2026" */
@@ -42,7 +40,7 @@ function ReportView() {
         const r = data as AllowanceReport;
         setReport(r);
         setDayRate(r.base_allowance);
-        setHolidayRate(r.base_allowance * HOLIDAY_MULTIPLIER);
+        setHolidayRate(r.base_allowance_holiday);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
       }

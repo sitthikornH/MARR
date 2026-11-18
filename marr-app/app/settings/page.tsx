@@ -182,9 +182,7 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {settings && (
-        <AutoImportSection settings={settings} intervals={INTERVAL_LABELS} onSaved={applySettings} onReload={loadSettings} />
-      )}
+      {settings && <AutoImportSection settings={settings} onSaved={applySettings} onReload={loadSettings} />}
 
       <CompanyHolidaysSection />
 

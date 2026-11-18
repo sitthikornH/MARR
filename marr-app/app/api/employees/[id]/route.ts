@@ -25,7 +25,7 @@ export async function GET(
     if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
 
     const rows = await query<RowDataPacket[]>(
-      "SELECT id, emp_code, name, base_allowance, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
+      "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
       [employeeId]
     );
 
@@ -62,10 +62,10 @@ export async function PUT(
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const rates = [body.base_allowance, body.base_ot_rate, body.return_home_rate];
+    const rates = [body.base_allowance, body.base_allowance_holiday, body.base_ot_rate, body.return_home_rate];
     if (rates.some((r) => typeof r !== "number" || !Number.isFinite(r) || r < 0)) {
       return NextResponse.json(
-        { error: "base_allowance, base_ot_rate, and return_home_rate must be numbers >= 0" },
+        { error: "base_allowance, base_allowance_holiday, base_ot_rate, and return_home_rate must be numbers >= 0" },
         { status: 400 }
       );
     }
@@ -75,12 +75,12 @@ export async function PUT(
     if (!isWorkShiftOption(body.work_shift)) {
       return NextResponse.json({ error: WORK_SHIFT_ERROR }, { status: 400 });
     }
-    const [baseAllowance, baseOtRate, returnHomeRate] = rates as number[];
+    const [baseAllowance, baseAllowanceHoliday, baseOtRate, returnHomeRate] = rates as number[];
     const workShift: string = body.work_shift;
 
     const result = await execute(
-      "UPDATE employees SET base_allowance = ?, base_ot_rate = ?, return_home_rate = ?, work_shift = ? WHERE id = ?",
-      [baseAllowance, baseOtRate, returnHomeRate, workShift, employeeId]
+      "UPDATE employees SET base_allowance = ?, base_allowance_holiday = ?, base_ot_rate = ?, return_home_rate = ?, work_shift = ? WHERE id = ?",
+      [baseAllowance, baseAllowanceHoliday, baseOtRate, returnHomeRate, workShift, employeeId]
     );
 
     if (result.affectedRows === 0) {
@@ -88,7 +88,7 @@ export async function PUT(
     }
 
     const rows = await query<RowDataPacket[]>(
-      "SELECT id, emp_code, name, base_allowance, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
+      "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
       [employeeId]
     );
     return NextResponse.json(rows[0] as Employee, { status: 200 });

@@ -34,7 +34,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<AllowanceR
 
   try {
     const employees = await query<RowDataPacket[]>(
-      "SELECT id, emp_code, name, base_allowance, work_shift FROM employees WHERE id = ?",
+      "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, work_shift FROM employees WHERE id = ?",
       [employeeId]
     );
     if (employees.length === 0) {
@@ -88,6 +88,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<AllowanceR
       month,
       year,
       base_allowance: Number(employee.base_allowance),
+      base_allowance_holiday: Number(employee.base_allowance_holiday),
       work_shift: employee.work_shift,
       days,
       fixed_time_counts: fixedTimeCounts,

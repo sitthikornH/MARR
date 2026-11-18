@@ -14,7 +14,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<Employee[]
     const ownOnly = auth.role !== "admin";
     const ownId: number = auth.employee_id ?? -1;
     const rows = await query<RowDataPacket[]>(
-      `SELECT e.id, e.emp_code, e.name, e.base_allowance, e.base_ot_rate, e.return_home_rate, e.work_shift, e.created_at,
+      `SELECT e.id, e.emp_code, e.name, e.base_allowance, e.base_allowance_holiday, e.base_ot_rate, e.return_home_rate, e.work_shift, e.created_at,
               u.username, u.role, u.password_hash IS NOT NULL AS has_password, u.locked_until > NOW() AS locked
        FROM employees e LEFT JOIN users u ON u.employee_id = e.id
        ${ownOnly ? "WHERE e.id = ?" : ""}
@@ -26,6 +26,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<Employee[]
       emp_code: r.emp_code,
       name: r.name,
       base_allowance: r.base_allowance,
+      base_allowance_holiday: r.base_allowance_holiday,
       base_ot_rate: r.base_ot_rate,
       return_home_rate: r.return_home_rate,
       work_shift: r.work_shift,
@@ -48,18 +49,22 @@ export async function POST(request: NextRequest): Promise<NextResponse<Employee 
   if ("response" in gate) return gate.response;
   try {
     const body = (await request.json()) as Partial<NewEmployee>;
-    const { emp_code, name, base_allowance, base_ot_rate, return_home_rate, work_shift } = body;
+    const { emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift } = body;
 
     if (
       !emp_code ||
       !name ||
       base_allowance === undefined ||
+      base_allowance_holiday === undefined ||
       base_ot_rate === undefined ||
       return_home_rate === undefined ||
       work_shift === undefined
     ) {
       return NextResponse.json(
-        { error: "emp_code, name, base_allowance, base_ot_rate, return_home_rate, and work_shift are required" },
+        {
+          error:
+            "emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, and work_shift are required",
+        },
         { status: 400 }
       );
     }
@@ -72,12 +77,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<Employee 
     }
 
     const result = await execute(
-      "INSERT INTO employees (emp_code, name, base_allowance, base_ot_rate, return_home_rate, work_shift) VALUES (?, ?, ?, ?, ?, ?)",
-      [emp_code, name, base_allowance, base_ot_rate, return_home_rate, work_shift]
+      "INSERT INTO employees (emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift]
     );
 
     const rows = await query<RowDataPacket[]>(
-      "SELECT id, emp_code, name, base_allowance, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
+      "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
       [result.insertId]
     );
 

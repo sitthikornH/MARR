@@ -3,27 +3,31 @@
 import { useEffect, useState } from "react";
 import type { AppSettings, CompanyImportResult } from "@/lib/types";
 
+const HOUR_OPTIONS: { value: number; label: string }[] = Array.from({ length: 24 }, (_, hour) => ({
+  value: hour,
+  label: `${String(hour).padStart(2, "0")}:00`,
+}));
+
 interface Props {
   settings: AppSettings;
-  intervals: { value: number; label: string }[];
   onSaved: (settings: AppSettings) => void;
   onReload: () => Promise<void>;
 }
 
 /** Settings > automatic company-wide attendance import (see lib/syncScheduler.ts). */
-export default function AutoImportSection({ settings, intervals, onSaved, onReload }: Props) {
+export default function AutoImportSection({ settings, onSaved, onReload }: Props) {
   const [enabled, setEnabled] = useState(settings.auto_import_enabled);
-  const [interval, setIntervalMinutes] = useState(settings.import_interval_minutes);
+  const [hour, setHour] = useState(settings.import_hour);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setEnabled(settings.auto_import_enabled);
-    setIntervalMinutes(settings.import_interval_minutes);
-  }, [settings.auto_import_enabled, settings.import_interval_minutes]);
+    setHour(settings.import_hour);
+  }, [settings.auto_import_enabled, settings.import_hour]);
 
-  const dirty = enabled !== settings.auto_import_enabled || interval !== settings.import_interval_minutes;
+  const dirty = enabled !== settings.auto_import_enabled || hour !== settings.import_hour;
 
   async function handleSave() {
     setSaving(true);
@@ -32,7 +36,7 @@ export default function AutoImportSection({ settings, intervals, onSaved, onRelo
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ auto_import_enabled: enabled, import_interval_minutes: interval }),
+        body: JSON.stringify({ auto_import_enabled: enabled, import_hour: hour }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to save settings");
@@ -75,8 +79,9 @@ export default function AutoImportSection({ settings, intervals, onSaved, onRelo
       <div>
         <h2 className="text-base font-semibold text-gray-900">Attendance Import (all employees)</h2>
         <p className="mt-1 text-sm text-gray-500">
-          Imports the current month for every employee from TimeMint in one go. During the first 5 days of a month
-          the previous month is imported again too, to pick up late approvals. Runs after the employee sync.
+          Imports the current month for every employee from TimeMint in one go, once a day at the time below.
+          During the first 5 days of a month the previous month is imported again too, to pick up late approvals.
+          Runs after the employee sync. Use &quot;Import this month now&quot; to run it on demand instead.
         </p>
       </div>
 
@@ -91,14 +96,14 @@ export default function AutoImportSection({ settings, intervals, onSaved, onRelo
       </label>
 
       <div className="flex flex-col gap-1 max-w-xs">
-        <label className="text-xs font-medium text-gray-600">Import frequency</label>
+        <label className="text-xs font-medium text-gray-600">Import time (once a day)</label>
         <select
-          value={interval}
-          onChange={(e) => setIntervalMinutes(Number(e.target.value))}
+          value={hour}
+          onChange={(e) => setHour(Number(e.target.value))}
           disabled={!enabled}
           className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:bg-gray-100 disabled:text-gray-400"
         >
-          {intervals.map((opt) => (
+          {HOUR_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>

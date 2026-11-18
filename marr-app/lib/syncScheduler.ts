@@ -14,6 +14,15 @@ declare global {
 const due = (last: string | null, intervalMinutes: number) =>
   Date.now() - (last ? new Date(last.replace(" ", "T")).getTime() : 0) >= intervalMinutes * 60_000;
 
+// The daily import is due once the clock reaches import_hour and it hasn't already run today
+// (so a restart that misses the exact hour still catches up later the same day, but only once).
+const importDue = (last: string | null, hour: number) => {
+  const now = new Date();
+  if (now.getHours() < hour) return false;
+  if (!last) return true;
+  return new Date(last.replace(" ", "T")).toDateString() !== now.toDateString();
+};
+
 async function tick(): Promise<void> {
   let settings;
   try {
@@ -32,7 +41,7 @@ async function tick(): Promise<void> {
     }
   }
 
-  if (settings.auto_import_enabled && due(settings.last_import_at, settings.import_interval_minutes)) {
+  if (settings.auto_import_enabled && importDue(settings.last_import_at, settings.import_hour)) {
     try {
       const today = localToday();
       const [year, month, day] = today.split("-").map(Number);

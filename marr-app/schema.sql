@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS employees (
   emp_code VARCHAR(20) NOT NULL UNIQUE,
   name VARCHAR(100) NOT NULL,
   base_allowance DECIMAL(10,2) NOT NULL DEFAULT 0,
+  base_allowance_holiday DECIMAL(10,2) NOT NULL DEFAULT 0, -- site allowance per worked holiday; shown as "Allowance Holiday" on the Employees page
   base_ot_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
   return_home_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
   work_shift VARCHAR(11) NOT NULL DEFAULT '08:00-17:00', -- "08:00-17:00" | "08:30-17:30" (lib/workShift.ts)
@@ -16,6 +17,10 @@ CREATE TABLE IF NOT EXISTS employees (
 );
 -- Upgrade for databases whose employees predates work_shift (run once):
 -- ALTER TABLE employees ADD COLUMN work_shift VARCHAR(11) NOT NULL DEFAULT '08:00-17:00' AFTER return_home_rate;
+-- Upgrade for databases whose employees predates base_allowance_holiday (run once); backfill with the
+-- old 3.5x-of-base_allowance assumption from the Allowance Report so existing printouts don't change:
+-- ALTER TABLE employees ADD COLUMN base_allowance_holiday DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER base_allowance;
+-- UPDATE employees SET base_allowance_holiday = base_allowance * 3.5;
 
 -- The company's own declared holiday calendar (e.g. the yearly ENSYS announcement), overriding
 -- TimeMint's own annual holiday data for the same date when building attendance_report.
@@ -272,15 +277,18 @@ CREATE TABLE IF NOT EXISTS app_settings (
   last_sync_at DATETIME NULL,
   last_sync_status VARCHAR(20) NULL,
   last_sync_message VARCHAR(500) NULL,
-  -- automatic company-wide attendance import (lib/companyImport.ts)
+  -- automatic company-wide attendance import (lib/companyImport.ts), runs once a day at import_hour
   auto_import_enabled TINYINT(1) NOT NULL DEFAULT 0,
-  import_interval_minutes INT NOT NULL DEFAULT 1440,
+  import_hour TINYINT NOT NULL DEFAULT 1,
   last_import_at DATETIME NULL,
   last_import_status VARCHAR(20) NULL,
   last_import_message VARCHAR(500) NULL
 );
 -- Upgrade: ALTER TABLE app_settings ADD COLUMN auto_import_enabled TINYINT(1) NOT NULL DEFAULT 0,
---   ADD COLUMN import_interval_minutes INT NOT NULL DEFAULT 1440, ADD COLUMN last_import_at DATETIME NULL,
+--   ADD COLUMN import_hour TINYINT NOT NULL DEFAULT 1, ADD COLUMN last_import_at DATETIME NULL,
 --   ADD COLUMN last_import_status VARCHAR(20) NULL, ADD COLUMN last_import_message VARCHAR(500) NULL;
+-- Upgrade: the auto import used to run on a fixed interval (import_interval_minutes); it now runs
+--   once a day at a chosen hour instead: ALTER TABLE app_settings ADD COLUMN import_hour TINYINT NOT NULL
+--   DEFAULT 1 AFTER auto_import_enabled, DROP COLUMN import_interval_minutes;
 
 INSERT IGNORE INTO app_settings (id) VALUES (1);

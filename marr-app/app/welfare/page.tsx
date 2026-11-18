@@ -8,10 +8,13 @@ const MONTH_NAMES = Array.from({ length: 12 }, (_, i) =>
   new Date(2000, i).toLocaleString("en-US", { month: "long" })
 );
 
+const employeeLabel = (employee: Employee) => `${employee.emp_code} - ${employee.name}`;
+
 export default function WelfareSummaryPage() {
   const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState("");
+  const [employeeQuery, setEmployeeQuery] = useState("");
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
   const [year, setYear] = useState(String(new Date().getFullYear()));
 
@@ -28,7 +31,8 @@ export default function WelfareSummaryPage() {
     const initial = new URLSearchParams(window.location.search);
     if (initial.get("month")) setMonth(initial.get("month")!);
     if (initial.get("year")) setYear(initial.get("year")!);
-    if (initial.get("employee_id")) setEmployeeId(initial.get("employee_id")!);
+    let selectedId = initial.get("employee_id") ?? "";
+    if (selectedId) setEmployeeId(selectedId);
 
     async function loadEmployees() {
       try {
@@ -38,14 +42,25 @@ export default function WelfareSummaryPage() {
         setEmployees(list);
         if (me?.role === "user") {
           setOwnOnly(true);
-          if (me.employee_id !== null) setEmployeeId(String(me.employee_id));
+          if (me.employee_id !== null) {
+            selectedId = String(me.employee_id);
+            setEmployeeId(selectedId);
+          }
         }
+        const match = list.find((employee) => String(employee.id) === selectedId);
+        if (match) setEmployeeQuery(employeeLabel(match));
       } catch {
         // Non-critical; the select will just be empty.
       }
     }
     loadEmployees();
   }, []);
+
+  function handleEmployeeQueryChange(value: string) {
+    setEmployeeQuery(value);
+    const match = employees.find((employee) => employeeLabel(employee) === value);
+    setEmployeeId(match ? String(match.id) : "");
+  }
 
   async function handleCalculate() {
     setError(null);
@@ -122,19 +137,21 @@ export default function WelfareSummaryPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-600">Employee</label>
-            <select
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
+            <input
+              type="text"
+              list="welfare-employee-options"
+              value={employeeQuery}
+              onChange={(e) => handleEmployeeQueryChange(e.target.value)}
               disabled={ownOnly}
+              placeholder="Type employee code or name..."
+              autoComplete="off"
               className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:bg-gray-50 disabled:text-gray-900"
-            >
-              {!ownOnly && <option value="">Select employee...</option>}
+            />
+            <datalist id="welfare-employee-options">
               {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.emp_code} - {employee.name}
-                </option>
+                <option key={employee.id} value={employeeLabel(employee)} />
               ))}
-            </select>
+            </datalist>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-600">Month</label>

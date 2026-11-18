@@ -3,6 +3,7 @@ export interface Employee {
   emp_code: string;
   name: string;
   base_allowance: number;
+  base_allowance_holiday: number; // site allowance per worked holiday
   base_ot_rate: number;
   return_home_rate: number;
   work_shift: string; // "08:00-17:00" | "08:30-17:30" (lib/workShift.ts) - used for late check-in
@@ -20,12 +21,18 @@ export interface EmployeeAccount {
 
 export type NewEmployee = Pick<
   Employee,
-  "emp_code" | "name" | "base_allowance" | "base_ot_rate" | "return_home_rate" | "work_shift"
+  | "emp_code"
+  | "name"
+  | "base_allowance"
+  | "base_allowance_holiday"
+  | "base_ot_rate"
+  | "return_home_rate"
+  | "work_shift"
 >;
 
 export type EmployeeRatesUpdate = Pick<
   Employee,
-  "base_allowance" | "base_ot_rate" | "return_home_rate" | "work_shift"
+  "base_allowance" | "base_allowance_holiday" | "base_ot_rate" | "return_home_rate" | "work_shift"
 >;
 
 export interface LocationRate {
@@ -99,9 +106,9 @@ export interface AppSettings {
   last_sync_at: string | null;
   last_sync_status: SyncStatus | null;
   last_sync_message: string | null;
-  // automatic company-wide attendance import (lib/companyImport.ts)
+  // automatic company-wide attendance import (lib/companyImport.ts), runs once a day at import_hour
   auto_import_enabled: boolean;
-  import_interval_minutes: number;
+  import_hour: number; // 0-23, hour of day (server local time) the daily auto import runs at
   last_import_at: string | null;
   last_import_status: SyncStatus | null;
   last_import_message: string | null;
@@ -109,7 +116,7 @@ export interface AppSettings {
 
 /** Either group may be sent on its own. */
 export type AppSettingsUpdate = Partial<
-  Pick<AppSettings, "auto_sync_enabled" | "sync_interval_minutes" | "auto_import_enabled" | "import_interval_minutes">
+  Pick<AppSettings, "auto_sync_enabled" | "sync_interval_minutes" | "auto_import_enabled" | "import_hour">
 >;
 
 export interface EmployeeSyncResult {
@@ -185,6 +192,7 @@ export interface AllowanceReport {
   month: number;
   year: number;
   base_allowance: number; // site allowance per normal work day
+  base_allowance_holiday: number; // site allowance per worked holiday
   work_shift: string; // "08:00-17:00" | "08:30-17:30" (lib/workShift.ts)
   days: AllowanceReportDay[];
   fixed_time_counts: Record<string, number>; // date -> count of approved time_adjustment_request rows
