@@ -11,9 +11,6 @@ declare global {
   var __marrSyncTimer: NodeJS.Timeout | undefined;
 }
 
-const due = (last: string | null, intervalMinutes: number) =>
-  Date.now() - (last ? new Date(last.replace(" ", "T")).getTime() : 0) >= intervalMinutes * 60_000;
-
 // The daily import is due once the clock reaches import_hour and it hasn't already run today
 // (so a restart that misses the exact hour still catches up later the same day, but only once).
 const importDue = (last: string | null, hour: number) => {
@@ -32,16 +29,17 @@ async function tick(): Promise<void> {
     return;
   }
 
-  // Employee sync first, so new employees (and their logins) exist before their attendance is imported.
-  if (settings.auto_sync_enabled && due(settings.last_sync_at, settings.sync_interval_minutes)) {
-    try {
-      console.log("Auto employee sync finished:", await runEmployeeSync());
-    } catch (error) {
-      console.error("Auto employee sync failed:", error);
-    }
-  }
-
+  // Employee sync and the attendance import now share one daily trigger (import_hour): sync runs
+  // right before import, once a day, so new employees (and their logins) exist before their
+  // attendance is imported. sync_interval_minutes is no longer read for scheduling.
   if (settings.auto_import_enabled && importDue(settings.last_import_at, settings.import_hour)) {
+    if (settings.auto_sync_enabled) {
+      try {
+        console.log("Auto employee sync finished:", await runEmployeeSync());
+      } catch (error) {
+        console.error("Auto employee sync failed:", error);
+      }
+    }
     try {
       const today = localToday();
       const [year, month, day] = today.split("-").map(Number);
