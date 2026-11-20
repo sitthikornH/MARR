@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { isReturnHomeOption, RETURN_HOME_OPTIONS, returnHomeLabel } from "@/lib/returnHome";
 import { DEFAULT_WORK_SHIFT, isWorkShiftOption, workShiftLabel, WORK_SHIFT_OPTIONS } from "@/lib/workShift";
-import type { Employee, EmployeeAccount, EmployeeRatesUpdate, NewEmployee, UserRole } from "@/lib/types";
+import type { Employee, EmployeeAccount, EmployeeRatesUpdate, NewEmployee, SupervisorAccount, UserRole } from "@/lib/types";
 
 // base_ot_rate is deliberately left out: OT pay isn't calculated yet, so its input is hidden here
 // (see ratesOf() below, which still sends the employee's current, now-zeroed value on every Update).
@@ -12,7 +12,10 @@ const RATE_FIELDS: (keyof EmployeeRatesUpdate)[] = [
   "base_allowance_holiday",
   "return_home_rate",
   "work_shift",
+  "supervisor_id",
 ];
+// These two aren't plain "rate >= 0" numbers, so handleUpdate validates them separately.
+const SELECT_FIELDS: (keyof EmployeeRatesUpdate)[] = ["work_shift", "supervisor_id"];
 
 function ratesOf(employee: Employee): EmployeeRatesUpdate {
   return {
@@ -21,6 +24,7 @@ function ratesOf(employee: Employee): EmployeeRatesUpdate {
     base_ot_rate: Number(employee.base_ot_rate),
     return_home_rate: Number(employee.return_home_rate),
     work_shift: employee.work_shift,
+    supervisor_id: employee.supervisor_id,
   };
 }
 
@@ -36,6 +40,7 @@ const EMPTY_FORM: NewEmployee = {
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [supervisors, setSupervisors] = useState<SupervisorAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<NewEmployee>(EMPTY_FORM);
@@ -65,6 +70,10 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     loadEmployees();
+    fetch("/api/supervisors")
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setSupervisors)
+      .catch(() => {});
   }, []);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -109,14 +118,16 @@ export default function EmployeesPage() {
     return RATE_FIELDS.some((f) => edited[f] !== original[f]);
   }
 
-  function setRate(employee: Employee, field: keyof EmployeeRatesUpdate, value: number | string) {
+  function setRate(employee: Employee, field: keyof EmployeeRatesUpdate, value: number | string | null) {
     setUpdatedId(null);
     setEdits({ ...edits, [employee.id]: { ...editedRates(employee), [field]: value } });
   }
 
   async function handleUpdate(employee: Employee) {
     const rates = editedRates(employee);
-    const numericFields = RATE_FIELDS.filter((f) => f !== "work_shift") as (keyof EmployeeRatesUpdate)[];
+    const numericFields = RATE_FIELDS.filter(
+      (f) => !SELECT_FIELDS.includes(f)
+    ) as (keyof EmployeeRatesUpdate)[];
     if (numericFields.some((f) => !Number.isFinite(rates[f]) || (rates[f] as number) < 0)) {
       setError("Rates must be numbers of 0 or more.");
       return;
@@ -327,6 +338,7 @@ export default function EmployeesPage() {
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Allowance Holiday</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Return Home</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Time In-Out</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Supervisor</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Login</th>
                 <th className="sticky right-0 z-10 bg-gray-50 text-right px-4 py-3 font-medium text-gray-600 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.15)]">
                   Actions
@@ -336,21 +348,21 @@ export default function EmployeesPage() {
             <tbody className="divide-y divide-gray-100">
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-6 text-center text-gray-500">
                     Loading employees...
                   </td>
                 </tr>
               )}
               {!loading && error && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-red-600">
+                  <td colSpan={9} className="px-4 py-6 text-center text-red-600">
                     {error}
                   </td>
                 </tr>
               )}
               {!loading && !error && employees.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-6 text-center text-gray-500">
                     No employees yet.
                   </td>
                 </tr>
@@ -396,6 +408,21 @@ export default function EmployeesPage() {
                             {WORK_SHIFT_OPTIONS.map((o) => (
                               <option key={o.value} value={o.value}>
                                 {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      ) : field === "supervisor_id" ? (
+                        <td key={field} className="px-4 py-2 text-right">
+                          <select
+                            value={editedRates(employee).supervisor_id ?? ""}
+                            onChange={(e) => setRate(employee, field, e.target.value ? Number(e.target.value) : null)}
+                            className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                          >
+                            <option value="">(none)</option>
+                            {supervisors.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.username}
                               </option>
                             ))}
                           </select>

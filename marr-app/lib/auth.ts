@@ -76,7 +76,7 @@ export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
   return {
     user_id: row.id,
     username: row.username,
-    role: row.role === "admin" ? "admin" : "user",
+    role: row.role === "admin" || row.role === "supervisor" ? row.role : "user",
     employee_id: row.employee_id,
     employee_name: row.employee_name ?? null,
     must_change_password: Boolean(row.must_change_password),
@@ -106,9 +106,29 @@ export async function requireAuth(
   return { auth };
 }
 
-/** Admins see every employee; a user sees only their own record. */
+/** Admins see every employee; a user sees only their own record. Supervisors never pass this one
+ *  (they have no employee_id) — see canAccessSupervisedEmployee for their scoped three forms. */
 export function canAccessEmployee(auth: AuthUser, employeeId: number): boolean {
   return auth.role === "admin" || auth.employee_id === employeeId;
+}
+
+async function isSupervisorOf(userId: number, employeeId: number): Promise<boolean> {
+  const rows = await query<RowDataPacket[]>("SELECT 1 FROM employees WHERE id = ? AND supervisor_id = ?", [
+    employeeId,
+    userId,
+  ]);
+  return rows.length > 0;
+}
+
+/**
+ * Like canAccessEmployee, but also lets a supervisor through for employees assigned to them.
+ * Used only by the three report routes supervisors may view (TimeMint, OT, Fixed Time Request) —
+ * everywhere else keeps using canAccessEmployee so supervisors stay out of Welfare/Allowance/Mileage.
+ */
+export async function canAccessSupervisedEmployee(auth: AuthUser, employeeId: number): Promise<boolean> {
+  if (canAccessEmployee(auth, employeeId)) return true;
+  if (auth.role === "supervisor") return isSupervisorOf(auth.user_id, employeeId);
+  return false;
 }
 
 export const forbidden = () => NextResponse.json({ error: "You can only view your own records" }, { status: 403 });

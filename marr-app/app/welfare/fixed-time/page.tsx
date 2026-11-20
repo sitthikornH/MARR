@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useBackBase } from "@/app/welfare/useBackBase";
 import { timeAdjustmentStatusKind } from "@/lib/timeAdjustmentStatus";
 import type { FixedTimeRequestReport } from "@/lib/types";
 
@@ -34,6 +35,7 @@ function ReportView() {
 
   const [report, setReport] = useState<FixedTimeRequestReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const backBase = useBackBase();
 
   useEffect(() => {
     fetch(`/api/welfare/fixed-time-request?employee_id=${employeeId}&month=${month}&year=${year}`)
@@ -56,7 +58,7 @@ function ReportView() {
 
       <div className="print:hidden flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <Link
-          href={`/welfare?employee_id=${employeeId}&month=${month}&year=${year}`}
+          href={`${backBase}?employee_id=${employeeId}&month=${month}&year=${year}`}
           className="text-sm text-gray-600 underline"
         >
           ← Back

@@ -5,6 +5,7 @@ import type { AppSettings } from "@/lib/types";
 import AutoImportSection from "./AutoImportSection";
 import FixHistorySection from "./FixHistorySection";
 import LoginHistorySection from "./LoginHistorySection";
+import SupervisorsSection from "./SupervisorsSection";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -40,6 +41,8 @@ export default function SettingsPage() {
       {!loading && error && <p className="text-sm text-red-600">{error}</p>}
 
       {settings && <AutoImportSection settings={settings} onSaved={setSettings} onReload={loadSettings} />}
+
+      <SupervisorsSection />
 
       <FixHistorySection />
 

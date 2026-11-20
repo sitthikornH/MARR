@@ -13,10 +13,15 @@ CREATE TABLE IF NOT EXISTS employees (
   base_ot_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
   return_home_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
   work_shift VARCHAR(11) NOT NULL DEFAULT '08:00-17:00', -- "08:00-17:00" | "08:30-17:30" (lib/workShift.ts)
+  supervisor_id INT NULL, -- users.id of role='supervisor'; FK added below (users is defined later)
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 -- Upgrade for databases whose employees predates work_shift (run once):
 -- ALTER TABLE employees ADD COLUMN work_shift VARCHAR(11) NOT NULL DEFAULT '08:00-17:00' AFTER return_home_rate;
+-- Upgrade for databases whose employees predates supervisor_id (run once; users must exist first):
+-- ALTER TABLE employees ADD COLUMN supervisor_id INT NULL AFTER work_shift;
+-- ALTER TABLE employees ADD CONSTRAINT fk_employees_supervisor FOREIGN KEY (supervisor_id)
+--   REFERENCES users(id) ON DELETE SET NULL;
 -- Upgrade for databases whose employees predates base_allowance_holiday (run once); backfill with the
 -- old 3.5x-of-base_allowance assumption from the Allowance Report so existing printouts don't change:
 -- ALTER TABLE employees ADD COLUMN base_allowance_holiday DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER base_allowance;
@@ -211,7 +216,7 @@ CREATE TABLE IF NOT EXISTS users (
   employee_id INT NULL UNIQUE,
   username VARCHAR(100) NOT NULL UNIQUE, -- stored lowercase
   password_hash VARCHAR(255) NULL, -- NULL = no password yet (admin must reset)
-  role VARCHAR(10) NOT NULL DEFAULT 'user', -- 'user' | 'admin'
+  role VARCHAR(10) NOT NULL DEFAULT 'user', -- 'user' | 'admin' | 'supervisor' (restricted admin, see employees.supervisor_id)
   must_change_password TINYINT(1) NOT NULL DEFAULT 1,
   failed_attempts INT NOT NULL DEFAULT 0,
   locked_until DATETIME NULL,
@@ -219,6 +224,11 @@ CREATE TABLE IF NOT EXISTS users (
   CONSTRAINT fk_users_employee FOREIGN KEY (employee_id)
     REFERENCES employees(id) ON DELETE CASCADE
 );
+
+-- A supervisor account (role='supervisor', employee_id NULL) can view the TimeMint, OT & Work on
+-- holiday, and Fixed Time Request forms (only) for the employees assigned to them below.
+ALTER TABLE employees ADD CONSTRAINT fk_employees_supervisor FOREIGN KEY (supervisor_id)
+  REFERENCES users(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS sessions (
   id INT AUTO_INCREMENT PRIMARY KEY,

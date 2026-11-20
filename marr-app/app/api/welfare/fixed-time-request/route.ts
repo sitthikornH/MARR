@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
+import { canAccessSupervisedEmployee, forbidden, requireAuth } from "@/lib/auth";
 import { query, type RowDataPacket } from "@/lib/db";
 import type { ApiError, FixedTimeRequestReport, FixedTimeRequestRow } from "@/lib/types";
 
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<FixedTimeR
   const employeeId: number = employeeIdNum;
   const month: number = monthNum;
   const year: number = yearNum;
-  if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
+  if (!(await canAccessSupervisedEmployee(gate.auth, employeeId))) return forbidden();
 
   try {
     const employees = await query<RowDataPacket[]>("SELECT emp_code, name FROM employees WHERE id = ?", [employeeId]);

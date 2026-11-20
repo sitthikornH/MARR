@@ -7,9 +7,19 @@ export interface Employee {
   base_ot_rate: number;
   return_home_rate: number;
   work_shift: string; // "08:00-17:00" | "08:30-17:30" (lib/workShift.ts) - used for late check-in
+  supervisor_id: number | null; // users.id of role='supervisor' assigned to view this employee's reports
   created_at: string;
   // Login account, only in the admin listing (GET /api/employees); null = no account yet
   account?: EmployeeAccount | null;
+}
+
+/** A restricted-admin account (role='supervisor', no employee_id) for the Employees page's
+ *  Supervisor column and Settings > Supervisors. */
+export interface SupervisorAccount {
+  id: number;
+  username: string;
+  has_password: boolean;
+  locked: boolean;
 }
 
 export interface EmployeeAccount {
@@ -32,7 +42,7 @@ export type NewEmployee = Pick<
 
 export type EmployeeRatesUpdate = Pick<
   Employee,
-  "base_allowance" | "base_allowance_holiday" | "base_ot_rate" | "return_home_rate" | "work_shift"
+  "base_allowance" | "base_allowance_holiday" | "base_ot_rate" | "return_home_rate" | "work_shift" | "supervisor_id"
 >;
 
 export interface LocationRate {
@@ -265,7 +275,7 @@ export interface MileageClaimRequest {
   other_items: MileageOtherItem[];
 }
 
-export type UserRole = "user" | "admin";
+export type UserRole = "user" | "admin" | "supervisor";
 
 export interface AuthUser {
   user_id: number;

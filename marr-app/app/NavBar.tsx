@@ -14,9 +14,12 @@ const ADMIN_LINKS = [
   { href: "/settings", label: "Settings" },
 ];
 const USER_LINKS = [{ href: "/welfare", label: "Welfare Summary" }];
+const SUPERVISOR_LINKS = [{ href: "/supervisor", label: "Supervisor" }];
 
 // Pages an employee (role user) may open; anything else sends them to Welfare Summary.
 const USER_PAGES = ["/welfare", "/welfare/allowance-report", "/welfare/mileage", "/welfare/timemint", "/welfare/ot", "/welfare/fixed-time", "/change-password"];
+// A supervisor only gets their picker page and the three forms it opens (lib/auth.ts canAccessSupervisedEmployee).
+const SUPERVISOR_PAGES = ["/supervisor", "/welfare/timemint", "/welfare/ot", "/welfare/fixed-time", "/change-password"];
 
 /** Global header: role-aware links, the signed-in user and Logout. Also redirects by session state. */
 export default function NavBar() {
@@ -39,6 +42,7 @@ export default function NavBar() {
         setMe(user);
         if (user.must_change_password && pathname !== "/change-password") router.replace("/change-password");
         else if (user.role === "user" && !USER_PAGES.includes(pathname)) router.replace("/welfare");
+        else if (user.role === "supervisor" && !SUPERVISOR_PAGES.includes(pathname)) router.replace("/supervisor");
       })
       .catch(() => {});
     return () => {
@@ -64,12 +68,22 @@ export default function NavBar() {
     router.replace("/login");
   }
 
-  const links = me?.must_change_password ? [] : me?.role === "admin" ? ADMIN_LINKS : me ? USER_LINKS : [];
+  const links = me?.must_change_password
+    ? []
+    : me?.role === "admin"
+      ? ADMIN_LINKS
+      : me?.role === "supervisor"
+        ? SUPERVISOR_LINKS
+        : me
+          ? USER_LINKS
+          : [];
+
+  const homeHref = me?.role === "admin" ? "/" : me?.role === "supervisor" ? "/supervisor" : "/welfare";
 
   return (
     <header className="border-b border-gray-200 bg-white sticky top-0 z-10 print:hidden">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-        <Link href={me?.role === "admin" ? "/" : "/welfare"} className="font-semibold text-lg tracking-tight text-gray-900">
+        <Link href={homeHref} className="font-semibold text-lg tracking-tight text-gray-900">
           Project MARR
         </Link>
         <nav className="flex items-center gap-1 sm:gap-4">

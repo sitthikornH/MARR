@@ -20,13 +20,15 @@ export default function ChangePasswordPage() {
       .catch(() => {});
   }, []);
 
-  const isAdmin = me?.role === "admin";
+  // Admins and supervisors (neither is an employee) use an 8+ character password; employees use a 4-digit PIN.
+  const isAdmin = me?.role === "admin" || me?.role === "supervisor";
+  const homeHref = me?.role === "admin" ? "/" : me?.role === "supervisor" ? "/supervisor" : "/welfare";
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     if (isAdmin ? next.length < 8 : !/^\d{4}$/.test(next)) {
-      setError(isAdmin ? "Admin password must be at least 8 characters." : "PIN must be exactly 4 digits.");
+      setError(isAdmin ? "Password must be at least 8 characters." : "PIN must be exactly 4 digits.");
       return;
     }
     if (next !== confirm) {
@@ -42,7 +44,7 @@ export default function ChangePasswordPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to change password");
-      router.replace(isAdmin ? "/" : "/welfare");
+      router.replace(homeHref);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

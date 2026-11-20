@@ -5,21 +5,33 @@ import { isReturnHomeOption, RETURN_HOME_ERROR } from "@/lib/returnHome";
 import { isWorkShiftOption, WORK_SHIFT_ERROR } from "@/lib/workShift";
 import type { ApiError, Employee, NewEmployee } from "@/lib/types";
 
-/** GET: admins get every employee with their login account; a user gets only their own record. */
+/**
+ * GET: admins get every employee with their login account; a user gets only their own record;
+ * a supervisor gets only the employees assigned to them (employees.supervisor_id), with no account
+ * info (same as a user) — they only ever use this list to pick who to view the three report forms for.
+ */
 export async function GET(request: NextRequest): Promise<NextResponse<Employee[] | ApiError>> {
   const gate = await requireAuth(request);
   if ("response" in gate) return gate.response;
   const { auth } = gate;
   try {
-    const ownOnly = auth.role !== "admin";
-    const ownId: number = auth.employee_id ?? -1;
+    const hideAccount = auth.role !== "admin";
+    let where = "";
+    let params: unknown[] = [];
+    if (auth.role === "user") {
+      where = "WHERE e.id = ?";
+      params = [auth.employee_id ?? -1];
+    } else if (auth.role === "supervisor") {
+      where = "WHERE e.supervisor_id = ?";
+      params = [auth.user_id];
+    }
     const rows = await query<RowDataPacket[]>(
-      `SELECT e.id, e.emp_code, e.name, e.base_allowance, e.base_allowance_holiday, e.base_ot_rate, e.return_home_rate, e.work_shift, e.created_at,
+      `SELECT e.id, e.emp_code, e.name, e.base_allowance, e.base_allowance_holiday, e.base_ot_rate, e.return_home_rate, e.work_shift, e.supervisor_id, e.created_at,
               u.username, u.role, u.password_hash IS NOT NULL AS has_password, u.locked_until > NOW() AS locked
        FROM employees e LEFT JOIN users u ON u.employee_id = e.id
-       ${ownOnly ? "WHERE e.id = ?" : ""}
+       ${where}
        ORDER BY e.id ASC`,
-      ownOnly ? [ownId] : []
+      params
     );
     const employees: Employee[] = rows.map((r) => ({
       id: r.id,
@@ -30,8 +42,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<Employee[]
       base_ot_rate: r.base_ot_rate,
       return_home_rate: r.return_home_rate,
       work_shift: r.work_shift,
+      supervisor_id: r.supervisor_id,
       created_at: r.created_at,
-      account: ownOnly
+      account: hideAccount
         ? undefined
         : r.username
           ? { username: r.username, role: r.role, has_password: Boolean(r.has_password), locked: Boolean(r.locked) }

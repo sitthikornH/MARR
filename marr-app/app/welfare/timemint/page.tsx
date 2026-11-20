@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import HighlightLegend from "@/app/welfare/HighlightLegend";
+import { useBackBase } from "@/app/welfare/useBackBase";
 import { PRINT_COLORS_CSS } from "@/lib/dayHighlight";
 import type { TimeMintMonthReport, TimeMintReportDay } from "@/lib/types";
 
@@ -31,6 +32,7 @@ function ReportView() {
 
   const [report, setReport] = useState<TimeMintMonthReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const backBase = useBackBase();
 
   useEffect(() => {
     fetch(`/api/welfare/timemint-report?employee_id=${employeeId}&month=${month}&year=${year}`)
@@ -54,7 +56,7 @@ function ReportView() {
       <style>{`@media print { @page { size: A4; margin: 8mm; } body { background: white !important; } ${PRINT_COLORS_CSS} }`}</style>
 
       <div className="print:hidden flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <Link href={`/welfare?employee_id=${employeeId}&month=${month}&year=${year}`} className="text-sm text-gray-600 underline">
+        <Link href={`${backBase}?employee_id=${employeeId}&month=${month}&year=${year}`} className="text-sm text-gray-600 underline">
           ← Back
         </Link>
         <button

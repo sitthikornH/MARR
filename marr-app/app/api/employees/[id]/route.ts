@@ -25,7 +25,7 @@ export async function GET(
     if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
 
     const rows = await query<RowDataPacket[]>(
-      "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
+      "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift, supervisor_id, created_at FROM employees WHERE id = ?",
       [employeeId]
     );
 
@@ -75,12 +75,25 @@ export async function PUT(
     if (!isWorkShiftOption(body.work_shift)) {
       return NextResponse.json({ error: WORK_SHIFT_ERROR }, { status: 400 });
     }
+    if (body.supervisor_id !== null && !Number.isInteger(body.supervisor_id)) {
+      return NextResponse.json({ error: "supervisor_id must be a supervisor's user id, or null" }, { status: 400 });
+    }
     const [baseAllowance, baseAllowanceHoliday, baseOtRate, returnHomeRate] = rates as number[];
     const workShift: string = body.work_shift;
+    let supervisorId: number | null = null;
+    if (body.supervisor_id !== null) {
+      const supervisors = await query<RowDataPacket[]>("SELECT id FROM users WHERE id = ? AND role = 'supervisor'", [
+        body.supervisor_id,
+      ]);
+      if (supervisors.length === 0) {
+        return NextResponse.json({ error: "No such supervisor account" }, { status: 400 });
+      }
+      supervisorId = body.supervisor_id as number;
+    }
 
     const result = await execute(
-      "UPDATE employees SET base_allowance = ?, base_allowance_holiday = ?, base_ot_rate = ?, return_home_rate = ?, work_shift = ? WHERE id = ?",
-      [baseAllowance, baseAllowanceHoliday, baseOtRate, returnHomeRate, workShift, employeeId]
+      "UPDATE employees SET base_allowance = ?, base_allowance_holiday = ?, base_ot_rate = ?, return_home_rate = ?, work_shift = ?, supervisor_id = ? WHERE id = ?",
+      [baseAllowance, baseAllowanceHoliday, baseOtRate, returnHomeRate, workShift, supervisorId, employeeId]
     );
 
     if (result.affectedRows === 0) {
@@ -88,7 +101,7 @@ export async function PUT(
     }
 
     const rows = await query<RowDataPacket[]>(
-      "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
+      "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift, supervisor_id, created_at FROM employees WHERE id = ?",
       [employeeId]
     );
     return NextResponse.json(rows[0] as Employee, { status: 200 });

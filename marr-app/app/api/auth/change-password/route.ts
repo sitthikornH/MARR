@@ -6,7 +6,8 @@ import type { ApiError } from "@/lib/types";
 
 /**
  * POST { current_password, new_password }. Employees (role user) must choose a 4-digit PIN;
- * admins need at least 8 characters. The new password must differ from the current one.
+ * admins and supervisors (neither is an employee) need at least 8 characters. The new password
+ * must differ from the current one.
  */
 export async function POST(request: NextRequest): Promise<NextResponse<{ success: true } | ApiError>> {
   const gate = await requireAuth(request, { allowMustChange: true });
@@ -22,9 +23,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<{ success
   const current = typeof body.current_password === "string" ? body.current_password : "";
   const next = typeof body.new_password === "string" ? body.new_password : "";
 
-  if (auth.role === "admin" ? !isValidAdminPassword(next) : !isValidPin(next)) {
+  const needsAdminRule = auth.role === "admin" || auth.role === "supervisor";
+  if (needsAdminRule ? !isValidAdminPassword(next) : !isValidPin(next)) {
     return NextResponse.json(
-      { error: auth.role === "admin" ? "Admin password must be at least 8 characters" : "PIN must be exactly 4 digits" },
+      { error: needsAdminRule ? "Password must be at least 8 characters" : "PIN must be exactly 4 digits" },
       { status: 400 }
     );
   }
