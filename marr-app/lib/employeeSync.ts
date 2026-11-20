@@ -162,9 +162,12 @@ export async function runEmployeeSync(): Promise<EmployeeSyncResult> {
           "INSERT INTO employees (emp_code, name) VALUES (?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)",
           [record.emp_code, record.name]
         );
-        // affectedRows: 1 = inserted, 2 = updated, 0 = unchanged
-        if (res.affectedRows === 1) result.inserted++;
-        else if (res.affectedRows === 2) result.updated++;
+        // This connection reports affectedRows as 1 for BOTH a new insert and an existing-but-unchanged
+        // row (confirmed empirically against this server), and 2 only when an existing row's name
+        // actually changed. insertId is the distinguishing signal: 0 for the unchanged case, the
+        // matched/new row's id otherwise.
+        if (res.affectedRows === 2) result.updated++;
+        else if (res.insertId !== 0) result.inserted++;
         else result.skipped++;
 
         const [idRows] = await connection.execute<RowDataPacket[]>("SELECT id FROM employees WHERE emp_code = ?", [
