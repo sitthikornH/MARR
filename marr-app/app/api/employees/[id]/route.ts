@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
+import { canAccessEmployee, canManageEmployees, forbidden, requireAuth } from "@/lib/auth";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import { isReturnHomeOption, RETURN_HOME_ERROR } from "@/lib/returnHome";
 import { isWorkShiftOption, WORK_SHIFT_ERROR } from "@/lib/workShift";
@@ -22,7 +22,7 @@ export async function GET(
     if (!Number.isInteger(employeeId)) {
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 });
     }
-    if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
+    if (!canManageEmployees(gate.auth) && !canAccessEmployee(gate.auth, employeeId)) return forbidden();
 
     const rows = await query<RowDataPacket[]>(
       "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift, supervisor_id, created_at FROM employees WHERE id = ?",
@@ -45,7 +45,7 @@ export async function PUT(
   request: NextRequest,
   { params }: RouteParams
 ): Promise<NextResponse<Employee | ApiError>> {
-  const gate = await requireAuth(request, { admin: true });
+  const gate = await requireAuth(request, { employees: true });
   if ("response" in gate) return gate.response;
   try {
     const { id } = await params;
@@ -115,7 +115,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: RouteParams
 ): Promise<NextResponse<{ success: true } | ApiError>> {
-  const gate = await requireAuth(request, { admin: true });
+  const gate = await requireAuth(request, { employees: true });
   if ("response" in gate) return gate.response;
   try {
     const { id } = await params;

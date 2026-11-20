@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import { IDLE_TIMEOUT_MINUTES } from "@/lib/sessionRules";
-import type { ApiError, AuthUser } from "@/lib/types";
+import type { ApiError, AuthUser, ReportScope } from "@/lib/types";
 
 export const SESSION_COOKIE = "marr_session";
 const SESSION_HOURS = 12; // the longest a session can last, even when in constant use
@@ -65,7 +65,8 @@ export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
   if (!token) return null;
   const tokenHash = sha256(token);
   const rows = await query<RowDataPacket[]>(
-    `SELECT u.id, u.username, u.role, u.employee_id, u.must_change_password, e.name AS employee_name
+    `SELECT u.id, u.username, u.role, u.employee_id, u.must_change_password, e.name AS employee_name,
+            u.can_manage_employees, u.can_manage_time_adjustment_history, u.timemint_scope, u.ot_scope, u.fixed_time_scope
      FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN employees e ON e.id = u.employee_id
      WHERE s.token_hash = ? AND s.expires_at > NOW() AND s.last_active_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)`,
     [tokenHash, IDLE_TIMEOUT_MINUTES]
@@ -73,6 +74,7 @@ export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
   const row = rows[0];
   if (!row) return null;
   await execute("UPDATE sessions SET last_active_at = NOW() WHERE token_hash = ?", [tokenHash]);
+  const scope = (v: unknown): ReportScope => (v === "all" ? "all" : "own");
   return {
     user_id: row.id,
     username: row.username,
@@ -80,6 +82,11 @@ export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
     employee_id: row.employee_id,
     employee_name: row.employee_name ?? null,
     must_change_password: Boolean(row.must_change_password),
+    can_manage_employees: Boolean(row.can_manage_employees),
+    can_manage_time_adjustment_history: Boolean(row.can_manage_time_adjustment_history),
+    timemint_scope: scope(row.timemint_scope),
+    ot_scope: scope(row.ot_scope),
+    fixed_time_scope: scope(row.fixed_time_scope),
   };
 }
 
@@ -90,10 +97,12 @@ type Gate = { auth: AuthUser } | { response: NextResponse<ApiError> };
  *   const gate = await requireAuth(request, { admin: true });
  *   if ("response" in gate) return gate.response;
  * Users who still have to change their first password are blocked unless allowMustChange is set.
+ * `employees`/`timeAdjustmentHistory` also let through a supervisor with that permission (see
+ * canManageEmployees/canManageTimeAdjustmentHistory below).
  */
 export async function requireAuth(
   request: NextRequest,
-  options: { admin?: boolean; allowMustChange?: boolean } = {}
+  options: { admin?: boolean; employees?: boolean; timeAdjustmentHistory?: boolean; allowMustChange?: boolean } = {}
 ): Promise<Gate> {
   const auth = await getAuth(request);
   if (!auth) return { response: NextResponse.json({ error: "Please log in" }, { status: 401 }) };
@@ -101,6 +110,12 @@ export async function requireAuth(
     return { response: NextResponse.json({ error: "Please set a new password first" }, { status: 403 }) };
   }
   if (options.admin && auth.role !== "admin") {
+    return { response: NextResponse.json({ error: "Admin only" }, { status: 403 }) };
+  }
+  if (options.employees && !canManageEmployees(auth)) {
+    return { response: NextResponse.json({ error: "Admin only" }, { status: 403 }) };
+  }
+  if (options.timeAdjustmentHistory && !canManageTimeAdjustmentHistory(auth)) {
     return { response: NextResponse.json({ error: "Admin only" }, { status: 403 }) };
   }
   return { auth };
@@ -112,6 +127,17 @@ export function canAccessEmployee(auth: AuthUser, employeeId: number): boolean {
   return auth.role === "admin" || auth.employee_id === employeeId;
 }
 
+/** A supervisor granted full Employees-page access (Settings > Supervisors) is treated like an
+ *  admin on every employee, not just the ones assigned to them. */
+export function canManageEmployees(auth: AuthUser): boolean {
+  return auth.role === "admin" || (auth.role === "supervisor" && auth.can_manage_employees);
+}
+
+/** A supervisor granted the Time Adjustment History permission (Settings > Supervisors). */
+export function canManageTimeAdjustmentHistory(auth: AuthUser): boolean {
+  return auth.role === "admin" || (auth.role === "supervisor" && auth.can_manage_time_adjustment_history);
+}
+
 async function isSupervisorOf(userId: number, employeeId: number): Promise<boolean> {
   const rows = await query<RowDataPacket[]>("SELECT 1 FROM employees WHERE id = ? AND supervisor_id = ?", [
     employeeId,
@@ -120,13 +146,35 @@ async function isSupervisorOf(userId: number, employeeId: number): Promise<boole
   return rows.length > 0;
 }
 
+export type SupervisedReport = "timemint" | "ot" | "fixed_time";
+
 /**
- * Like canAccessEmployee, but also lets a supervisor through for employees assigned to them.
- * Used only by the three report routes supervisors may view (TimeMint, OT, Fixed Time Request) —
- * everywhere else keeps using canAccessEmployee so supervisors stay out of Welfare/Allowance/Mileage.
+ * Like canAccessEmployee, but also lets a supervisor through for the three report routes they may
+ * view (TimeMint, OT, Fixed Time Request) — everywhere else keeps using canAccessEmployee so
+ * supervisors stay out of Welfare/Allowance/Mileage. A supervisor whose scope for that report is
+ * 'all' (Settings > Supervisors) sees every employee there; otherwise only the ones assigned to
+ * them (employees.supervisor_id).
  */
-export async function canAccessSupervisedEmployee(auth: AuthUser, employeeId: number): Promise<boolean> {
+export async function canAccessSupervisedEmployee(
+  auth: AuthUser,
+  employeeId: number,
+  report: SupervisedReport
+): Promise<boolean> {
   if (canAccessEmployee(auth, employeeId)) return true;
+  if (auth.role !== "supervisor") return false;
+  const scope: ReportScope =
+    report === "timemint" ? auth.timemint_scope : report === "ot" ? auth.ot_scope : auth.fixed_time_scope;
+  if (scope === "all") return true;
+  return isSupervisorOf(auth.user_id, employeeId);
+}
+
+/**
+ * Which employees a supervisor may submit Time Adjustment/OT history records for (Settings >
+ * Time Adjustment History): every employee if they also have full Employees access, else only the
+ * ones assigned to them.
+ */
+export async function canManageEmployeeHistory(auth: AuthUser, employeeId: number): Promise<boolean> {
+  if (canManageEmployees(auth)) return true;
   if (auth.role === "supervisor") return isSupervisorOf(auth.user_id, employeeId);
   return false;
 }

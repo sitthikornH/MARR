@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { canManageEmployees, requireAuth } from "@/lib/auth";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import { isReturnHomeOption, RETURN_HOME_ERROR } from "@/lib/returnHome";
 import { isWorkShiftOption, WORK_SHIFT_ERROR } from "@/lib/workShift";
@@ -8,20 +8,22 @@ import type { ApiError, Employee, NewEmployee } from "@/lib/types";
 /**
  * GET: admins get every employee with their login account; a user gets only their own record;
  * a supervisor gets only the employees assigned to them (employees.supervisor_id), with no account
- * info (same as a user) — they only ever use this list to pick who to view the three report forms for.
+ * info (same as a user) — they only ever use this list to pick who to view the three report forms
+ * for. A supervisor with full Employees access (Settings > Supervisors) is treated like an admin.
  */
 export async function GET(request: NextRequest): Promise<NextResponse<Employee[] | ApiError>> {
   const gate = await requireAuth(request);
   if ("response" in gate) return gate.response;
   const { auth } = gate;
   try {
-    const hideAccount = auth.role !== "admin";
+    const manageAll = canManageEmployees(auth);
+    const hideAccount = !manageAll;
     let where = "";
     let params: unknown[] = [];
     if (auth.role === "user") {
       where = "WHERE e.id = ?";
       params = [auth.employee_id ?? -1];
-    } else if (auth.role === "supervisor") {
+    } else if (auth.role === "supervisor" && !manageAll) {
       where = "WHERE e.supervisor_id = ?";
       params = [auth.user_id];
     }
@@ -58,7 +60,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<Employee[]
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<Employee | ApiError>> {
-  const gate = await requireAuth(request, { admin: true });
+  const gate = await requireAuth(request, { employees: true });
   if ("response" in gate) return gate.response;
   try {
     const body = (await request.json()) as Partial<NewEmployee>;

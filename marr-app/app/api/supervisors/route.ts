@@ -12,16 +12,31 @@ import type { ApiError, SupervisorAccount } from "@/lib/types";
  * employee id, which these accounts don't have.
  */
 
-async function loadSupervisors(): Promise<SupervisorAccount[]> {
-  const rows = await query<RowDataPacket[]>(
-    "SELECT id, username, password_hash IS NOT NULL AS has_password, locked_until > NOW() AS locked FROM users WHERE role = 'supervisor' ORDER BY username"
-  );
-  return rows.map((r) => ({
+function toScope(v: unknown) {
+  return v === "all" ? "all" : "own";
+}
+
+function toSupervisorAccount(r: RowDataPacket): SupervisorAccount {
+  return {
     id: r.id,
     username: r.username,
     has_password: Boolean(r.has_password),
     locked: Boolean(r.locked),
-  }));
+    can_manage_employees: Boolean(r.can_manage_employees),
+    can_manage_time_adjustment_history: Boolean(r.can_manage_time_adjustment_history),
+    timemint_scope: toScope(r.timemint_scope),
+    ot_scope: toScope(r.ot_scope),
+    fixed_time_scope: toScope(r.fixed_time_scope),
+  };
+}
+
+async function loadSupervisors(): Promise<SupervisorAccount[]> {
+  const rows = await query<RowDataPacket[]>(
+    `SELECT id, username, password_hash IS NOT NULL AS has_password, locked_until > NOW() AS locked,
+            can_manage_employees, can_manage_time_adjustment_history, timemint_scope, ot_scope, fixed_time_scope
+     FROM users WHERE role = 'supervisor' ORDER BY username`
+  );
+  return rows.map(toSupervisorAccount);
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse<SupervisorAccount[] | ApiError>> {
@@ -55,11 +70,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<Superviso
       "INSERT INTO users (employee_id, username, password_hash, role, must_change_password) VALUES (NULL, ?, ?, 'supervisor', 1)",
       [username, await hashPassword(password)]
     );
-    const rows = await query<RowDataPacket[]>("SELECT id, username FROM users WHERE id = ?", [result.insertId]);
-    return NextResponse.json(
-      { id: rows[0].id, username: rows[0].username, has_password: true, locked: false },
-      { status: 201 }
+    const rows = await query<RowDataPacket[]>(
+      `SELECT id, username, password_hash IS NOT NULL AS has_password, locked_until > NOW() AS locked,
+              can_manage_employees, can_manage_time_adjustment_history, timemint_scope, ot_scope, fixed_time_scope
+       FROM users WHERE id = ?`,
+      [result.insertId]
     );
+    return NextResponse.json(toSupervisorAccount(rows[0]), { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes("Duplicate entry")) {

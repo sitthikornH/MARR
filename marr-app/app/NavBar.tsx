@@ -14,12 +14,26 @@ const ADMIN_LINKS = [
   { href: "/settings", label: "Settings" },
 ];
 const USER_LINKS = [{ href: "/welfare", label: "Welfare Summary" }];
-const SUPERVISOR_LINKS = [{ href: "/supervisor", label: "Supervisor" }];
 
 // Pages an employee (role user) may open; anything else sends them to Welfare Summary.
 const USER_PAGES = ["/welfare", "/welfare/allowance-report", "/welfare/mileage", "/welfare/timemint", "/welfare/ot", "/welfare/fixed-time", "/change-password"];
-// A supervisor only gets their picker page and the three forms it opens (lib/auth.ts canAccessSupervisedEmployee).
-const SUPERVISOR_PAGES = ["/supervisor", "/welfare/timemint", "/welfare/ot", "/welfare/fixed-time", "/change-password"];
+
+/** A supervisor always gets their picker page and the three forms it opens (lib/auth.ts
+ *  canAccessSupervisedEmployee); Employees and Settings are extra, independent permissions set on
+ *  Settings > Supervisors (lib/auth.ts canManageEmployees/canManageTimeAdjustmentHistory). */
+function supervisorLinks(me: AuthUser): { href: string; label: string }[] {
+  const links = [{ href: "/supervisor", label: "Supervisor" }];
+  if (me.can_manage_employees) links.push({ href: "/employees", label: "Employees" });
+  if (me.can_manage_time_adjustment_history) links.push({ href: "/settings", label: "Settings" });
+  return links;
+}
+
+function supervisorPages(me: AuthUser): string[] {
+  const pages = ["/supervisor", "/welfare/timemint", "/welfare/ot", "/welfare/fixed-time", "/change-password"];
+  if (me.can_manage_employees) pages.push("/employees");
+  if (me.can_manage_time_adjustment_history) pages.push("/settings");
+  return pages;
+}
 
 /** Global header: role-aware links, the signed-in user and Logout. Also redirects by session state. */
 export default function NavBar() {
@@ -42,7 +56,7 @@ export default function NavBar() {
         setMe(user);
         if (user.must_change_password && pathname !== "/change-password") router.replace("/change-password");
         else if (user.role === "user" && !USER_PAGES.includes(pathname)) router.replace("/welfare");
-        else if (user.role === "supervisor" && !SUPERVISOR_PAGES.includes(pathname)) router.replace("/supervisor");
+        else if (user.role === "supervisor" && !supervisorPages(user).includes(pathname)) router.replace("/supervisor");
       })
       .catch(() => {});
     return () => {
@@ -73,7 +87,7 @@ export default function NavBar() {
     : me?.role === "admin"
       ? ADMIN_LINKS
       : me?.role === "supervisor"
-        ? SUPERVISOR_LINKS
+        ? supervisorLinks(me)
         : me
           ? USER_LINKS
           : [];

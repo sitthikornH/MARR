@@ -27,7 +27,7 @@ async function loadAccount(employeeId: number): Promise<EmployeeAccount | null> 
  * account first if the employee has none.
  */
 export async function POST(request: NextRequest, { params }: RouteParams): Promise<NextResponse<EmployeeAccount | ApiError>> {
-  const gate = await requireAuth(request, { admin: true });
+  const gate = await requireAuth(request, { employees: true });
   if ("response" in gate) return gate.response;
 
   const employeeId = Number((await params).employeeId);
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
 
 /** PUT { role } (admin): makes the employee's account an admin or a normal user. */
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse<EmployeeAccount | ApiError>> {
-  const gate = await requireAuth(request, { admin: true });
+  const gate = await requireAuth(request, { employees: true });
   if ("response" in gate) return gate.response;
 
   const employeeId = Number((await params).employeeId);

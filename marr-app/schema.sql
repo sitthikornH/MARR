@@ -220,10 +220,24 @@ CREATE TABLE IF NOT EXISTS users (
   must_change_password TINYINT(1) NOT NULL DEFAULT 1,
   failed_attempts INT NOT NULL DEFAULT 0,
   locked_until DATETIME NULL,
+  -- The next 5 columns only apply to role='supervisor'; each is an independent toggle an admin sets
+  -- per account on Settings > Supervisors (not a fixed set of presets).
+  can_manage_employees TINYINT(1) NOT NULL DEFAULT 0, -- full Employees-page access, like an admin
+  can_manage_time_adjustment_history TINYINT(1) NOT NULL DEFAULT 0, -- Settings > Time Adjustment History access
+  timemint_scope VARCHAR(3) NOT NULL DEFAULT 'own', -- 'own' (employees.supervisor_id assigned to them) | 'all', for the TimeMint report
+  ot_scope VARCHAR(3) NOT NULL DEFAULT 'own', -- same, for the OT & Work on holiday report
+  fixed_time_scope VARCHAR(3) NOT NULL DEFAULT 'own', -- same, for the Fixed Time Request report
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_users_employee FOREIGN KEY (employee_id)
     REFERENCES employees(id) ON DELETE CASCADE
 );
+-- Upgrade for databases whose users predates the 5 supervisor-permission columns above (run once):
+-- ALTER TABLE users
+--   ADD COLUMN can_manage_employees TINYINT(1) NOT NULL DEFAULT 0 AFTER locked_until,
+--   ADD COLUMN can_manage_time_adjustment_history TINYINT(1) NOT NULL DEFAULT 0 AFTER can_manage_employees,
+--   ADD COLUMN timemint_scope VARCHAR(3) NOT NULL DEFAULT 'own' AFTER can_manage_time_adjustment_history,
+--   ADD COLUMN ot_scope VARCHAR(3) NOT NULL DEFAULT 'own' AFTER timemint_scope,
+--   ADD COLUMN fixed_time_scope VARCHAR(3) NOT NULL DEFAULT 'own' AFTER ot_scope;
 
 -- A supervisor account (role='supervisor', employee_id NULL) can view the TimeMint, OT & Work on
 -- holiday, and Fixed Time Request forms (only) for the employees assigned to them below.

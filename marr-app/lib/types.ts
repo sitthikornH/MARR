@@ -13,14 +13,28 @@ export interface Employee {
   account?: EmployeeAccount | null;
 }
 
+/** 'own' = only employees.supervisor_id assigned to this account; 'all' = every employee. */
+export type ReportScope = "own" | "all";
+
 /** A restricted-admin account (role='supervisor', no employee_id) for the Employees page's
- *  Supervisor column and Settings > Supervisors. */
+ *  Supervisor column and Settings > Supervisors. Each permission below is an independent toggle
+ *  an admin sets per account (not a fixed set of presets). */
 export interface SupervisorAccount {
   id: number;
   username: string;
   has_password: boolean;
   locked: boolean;
+  can_manage_employees: boolean; // full Employees-page access, like an admin
+  can_manage_time_adjustment_history: boolean; // Settings > Time Adjustment History access
+  timemint_scope: ReportScope;
+  ot_scope: ReportScope;
+  fixed_time_scope: ReportScope;
 }
+
+export type SupervisorPermissionsUpdate = Pick<
+  SupervisorAccount,
+  "can_manage_employees" | "can_manage_time_adjustment_history" | "timemint_scope" | "ot_scope" | "fixed_time_scope"
+>;
 
 export interface EmployeeAccount {
   username: string;
@@ -284,6 +298,12 @@ export interface AuthUser {
   employee_id: number | null; // null for admin-only accounts
   employee_name: string | null;
   must_change_password: boolean;
+  // Meaningful only when role === 'supervisor'; see SupervisorAccount.
+  can_manage_employees: boolean;
+  can_manage_time_adjustment_history: boolean;
+  timemint_scope: ReportScope;
+  ot_scope: ReportScope;
+  fixed_time_scope: ReportScope;
 }
 
 export interface CompanyImportEmployee {

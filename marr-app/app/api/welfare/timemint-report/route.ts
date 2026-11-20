@@ -52,7 +52,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<TimeMintMo
   const employeeId: number = employeeIdNum;
   const month: number = monthNum;
   const year: number = yearNum;
-  if (!(await canAccessSupervisedEmployee(gate.auth, employeeId))) return forbidden();
+  if (!(await canAccessSupervisedEmployee(gate.auth, employeeId, "timemint"))) return forbidden();
 
   try {
     const employees = await query<RowDataPacket[]>("SELECT emp_code, name FROM employees WHERE id = ?", [employeeId]);

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { canManageEmployeeHistory, forbidden, requireAuth } from "@/lib/auth";
 import pool, { query, type RowDataPacket } from "@/lib/db";
 import { parseOtHistory, toOtHistoryTables } from "@/lib/otHistory";
 import type { ApiError, FixHistoryEmployeeResult } from "@/lib/types";
@@ -27,11 +27,12 @@ async function saveRecords(employeeId: number, records: ReturnType<typeof parseO
 }
 
 /**
- * POST { employee_id, tables } (admin): saves one employee's OT request submission times ("เพิ่มเมื่อ"),
- * as read from TimeMint's website in the admin's own browser (lib/fixHistoryBookmarklet.ts).
+ * POST { employee_id, tables } (admin, or a supervisor with the Time Adjustment History
+ * permission): saves one employee's OT request submission times ("เพิ่มเมื่อ"), as read from
+ * TimeMint's website in the admin's own browser (lib/fixHistoryBookmarklet.ts).
  */
 export async function POST(request: NextRequest): Promise<NextResponse<FixHistoryEmployeeResult | ApiError>> {
-  const gate = await requireAuth(request, { admin: true });
+  const gate = await requireAuth(request, { timeAdjustmentHistory: true });
   if ("response" in gate) return gate.response;
 
   const body = (await request.json().catch(() => ({}))) as { employee_id?: unknown; tables?: unknown };
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<FixHistor
     return NextResponse.json({ error: "employee_id and tables are required" }, { status: 400 });
   }
   const employeeId: number = employeeIdNum;
+  if (!(await canManageEmployeeHistory(gate.auth, employeeId))) return forbidden();
 
   try {
     const employees = await query<RowDataPacket[]>("SELECT emp_code, name FROM employees WHERE id = ?", [employeeId]);
