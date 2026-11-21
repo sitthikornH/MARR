@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import { hashPassword, isValidAdminPassword } from "@/lib/password";
-import { SUPERVISOR_COLUMNS, toSupervisorAccount } from "@/lib/supervisorAccount";
+import { groupIdsExist, isReportAccess, normalizeReportAccess, SUPERVISOR_COLUMNS, toSupervisorAccount } from "@/lib/supervisorAccount";
 import type { ApiError, ReportAccess, SupervisorAccount, SupervisorPermissionsUpdate } from "@/lib/types";
 
 interface RouteParams {
@@ -14,12 +14,6 @@ async function loadOne(id: number): Promise<SupervisorAccount | null> {
     id,
   ]);
   return rows[0] ? toSupervisorAccount(rows[0]) : null;
-}
-
-function isReportAccess(v: unknown): v is ReportAccess {
-  if (typeof v !== "object" || v === null) return false;
-  const a = v as Partial<ReportAccess>;
-  return typeof a.all === "boolean" && (a.group_id === null || (typeof a.group_id === "number" && Number.isInteger(a.group_id)));
 }
 
 /**
@@ -52,19 +46,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     );
   }
 
-  const timemint: ReportAccess = { group_id: body.timemint.all ? null : body.timemint.group_id, all: body.timemint.all };
-  const ot: ReportAccess = { group_id: body.ot.all ? null : body.ot.group_id, all: body.ot.all };
-  const fixedTime: ReportAccess = { group_id: body.fixed_time.all ? null : body.fixed_time.group_id, all: body.fixed_time.all };
+  const timemint: ReportAccess = normalizeReportAccess(body.timemint);
+  const ot: ReportAccess = normalizeReportAccess(body.ot);
+  const fixedTime: ReportAccess = normalizeReportAccess(body.fixed_time);
 
   try {
     const groupIds = [timemint.group_id, ot.group_id, fixedTime.group_id].filter((g): g is number => g !== null);
-    if (groupIds.length > 0) {
-      const unique = [...new Set(groupIds)];
-      const rows = await query<RowDataPacket[]>(
-        `SELECT id FROM employee_groups WHERE id IN (${unique.map(() => "?").join(", ")})`,
-        unique
-      );
-      if (rows.length !== unique.length) return NextResponse.json({ error: "No such employee group" }, { status: 400 });
+    if (!(await groupIdsExist(groupIds))) {
+      return NextResponse.json({ error: "No such employee group" }, { status: 400 });
     }
 
     const result = await execute(

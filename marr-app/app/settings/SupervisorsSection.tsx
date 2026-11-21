@@ -28,6 +28,44 @@ function permissionsOf(s: SupervisorAccount): SupervisorPermissionsUpdate {
   };
 }
 
+const NO_ACCESS: ReportAccess = { group_id: null, all: false };
+const EMPTY_PERMISSIONS: SupervisorPermissionsUpdate = {
+  can_manage_employees: false,
+  can_manage_time_adjustment_history: false,
+  timemint: NO_ACCESS,
+  ot: NO_ACCESS,
+  fixed_time: NO_ACCESS,
+};
+
+function AccessSelect({
+  value,
+  groups,
+  disabled,
+  onChange,
+}: {
+  value: ReportAccess;
+  groups: EmployeeGroup[];
+  disabled?: boolean;
+  onChange: (next: ReportAccess) => void;
+}) {
+  return (
+    <select
+      value={accessValue(value)}
+      disabled={disabled}
+      onChange={(e) => onChange(parseAccessValue(e.target.value))}
+      className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+    >
+      <option value={NONE_VALUE}>None</option>
+      <option value={ALL_VALUE}>All groups</option>
+      {groups.map((g) => (
+        <option key={g.id} value={g.id}>
+          {g.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /**
  * Settings > manage supervisor accounts (role='supervisor', no employee record). A supervisor can
  * view the TimeMint, OT & Work on holiday, and Fixed Time Request forms (only) for the employees
@@ -42,6 +80,7 @@ export default function SupervisorsSection() {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [newPermissions, setNewPermissions] = useState<SupervisorPermissionsUpdate>(EMPTY_PERMISSIONS);
   const [creating, setCreating] = useState(false);
 
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -77,12 +116,13 @@ export default function SupervisorsSection() {
       const res = await fetch("/api/supervisors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, ...newPermissions }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to create supervisor");
       setUsername("");
       setPassword("");
+      setNewPermissions(EMPTY_PERMISSIONS);
       setMessage(`Created "${(data as SupervisorAccount).username}".`);
       await load();
     } catch (err) {
@@ -190,6 +230,50 @@ export default function SupervisorsSection() {
             className="w-48 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
           />
         </div>
+        <label className="flex flex-col items-center gap-1">
+          <span className="text-xs font-medium text-gray-600">Employees</span>
+          <input
+            type="checkbox"
+            checked={newPermissions.can_manage_employees}
+            onChange={(e) => setNewPermissions({ ...newPermissions, can_manage_employees: e.target.checked })}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+        </label>
+        <label className="flex flex-col items-center gap-1">
+          <span className="text-xs font-medium text-gray-600">Time Adj. &amp; OT History</span>
+          <input
+            type="checkbox"
+            checked={newPermissions.can_manage_time_adjustment_history}
+            onChange={(e) =>
+              setNewPermissions({ ...newPermissions, can_manage_time_adjustment_history: e.target.checked })
+            }
+            className="h-4 w-4 rounded border-gray-300"
+          />
+        </label>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-600">TimeMint</span>
+          <AccessSelect
+            value={newPermissions.timemint}
+            groups={groups}
+            onChange={(timemint) => setNewPermissions({ ...newPermissions, timemint })}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-600">SheetOver Time</span>
+          <AccessSelect
+            value={newPermissions.ot}
+            groups={groups}
+            onChange={(ot) => setNewPermissions({ ...newPermissions, ot })}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-600">Sheet fixed time request</span>
+          <AccessSelect
+            value={newPermissions.fixed_time}
+            groups={groups}
+            onChange={(fixed_time) => setNewPermissions({ ...newPermissions, fixed_time })}
+          />
+        </div>
         <button
           onClick={handleCreate}
           disabled={creating || !username.trim() || !password}
@@ -243,52 +327,28 @@ export default function SupervisorsSection() {
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <select
-                      value={accessValue(s.timemint)}
+                    <AccessSelect
+                      value={s.timemint}
+                      groups={groups}
                       disabled={busyId === s.id}
-                      onChange={(e) => handlePermissionChange(s, { timemint: parseAccessValue(e.target.value) })}
-                      className="rounded border border-gray-300 px-1 py-0.5 text-xs"
-                    >
-                      <option value={NONE_VALUE}>None</option>
-                      <option value={ALL_VALUE}>All groups</option>
-                      {groups.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(timemint) => handlePermissionChange(s, { timemint })}
+                    />
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <select
-                      value={accessValue(s.ot)}
+                    <AccessSelect
+                      value={s.ot}
+                      groups={groups}
                       disabled={busyId === s.id}
-                      onChange={(e) => handlePermissionChange(s, { ot: parseAccessValue(e.target.value) })}
-                      className="rounded border border-gray-300 px-1 py-0.5 text-xs"
-                    >
-                      <option value={NONE_VALUE}>None</option>
-                      <option value={ALL_VALUE}>All groups</option>
-                      {groups.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(ot) => handlePermissionChange(s, { ot })}
+                    />
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <select
-                      value={accessValue(s.fixed_time)}
+                    <AccessSelect
+                      value={s.fixed_time}
+                      groups={groups}
                       disabled={busyId === s.id}
-                      onChange={(e) => handlePermissionChange(s, { fixed_time: parseAccessValue(e.target.value) })}
-                      className="rounded border border-gray-300 px-1 py-0.5 text-xs"
-                    >
-                      <option value={NONE_VALUE}>None</option>
-                      <option value={ALL_VALUE}>All groups</option>
-                      {groups.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(fixed_time) => handlePermissionChange(s, { fixed_time })}
+                    />
                   </td>
                   <td className="px-3 py-2 text-gray-500">
                     {!s.has_password && <span className="text-amber-700">no password</span>}
