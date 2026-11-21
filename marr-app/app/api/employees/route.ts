@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canManageEmployees, requireAuth } from "@/lib/auth";
+import { canManageEmployees, requireAuth, supervisorGroupFilter } from "@/lib/auth";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import { isReturnHomeOption, RETURN_HOME_ERROR } from "@/lib/returnHome";
 import { isWorkShiftOption, WORK_SHIFT_ERROR } from "@/lib/workShift";
@@ -7,9 +7,11 @@ import type { ApiError, Employee, NewEmployee } from "@/lib/types";
 
 /**
  * GET: admins get every employee with their login account; a user gets only their own record;
- * a supervisor gets only the employees assigned to them (employees.supervisor_id), with no account
- * info (same as a user) — they only ever use this list to pick who to view the three report forms
- * for. A supervisor with full Employees access (Settings > Supervisors) is treated like an admin.
+ * a supervisor gets only the employees reachable through any of their report grants
+ * (lib/auth.ts supervisorGroupFilter), with no account info (same as a user) — they only ever use
+ * this list to pick who to view the three report forms for, or (Settings > Time Adjustment
+ * History) submit records for. A supervisor with full Employees access (Settings > Supervisors) is
+ * treated like an admin.
  */
 export async function GET(request: NextRequest): Promise<NextResponse<Employee[] | ApiError>> {
   const gate = await requireAuth(request);
@@ -24,11 +26,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<Employee[]
       where = "WHERE e.id = ?";
       params = [auth.employee_id ?? -1];
     } else if (auth.role === "supervisor" && !manageAll) {
-      where = "WHERE e.supervisor_id = ?";
-      params = [auth.user_id];
+      const { allowAll, groupIds } = supervisorGroupFilter(auth);
+      if (!allowAll) {
+        where = groupIds.length > 0 ? `WHERE e.group_id IN (${groupIds.map(() => "?").join(", ")})` : "WHERE 1 = 0";
+        params = groupIds;
+      }
     }
     const rows = await query<RowDataPacket[]>(
-      `SELECT e.id, e.emp_code, e.name, e.base_allowance, e.base_allowance_holiday, e.base_ot_rate, e.return_home_rate, e.work_shift, e.supervisor_id, e.created_at,
+      `SELECT e.id, e.emp_code, e.name, e.base_allowance, e.base_allowance_holiday, e.base_ot_rate, e.return_home_rate, e.work_shift, e.group_id, e.created_at,
               u.username, u.role, u.password_hash IS NOT NULL AS has_password, u.locked_until > NOW() AS locked
        FROM employees e LEFT JOIN users u ON u.employee_id = e.id
        ${where}
@@ -44,7 +49,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<Employee[]
       base_ot_rate: r.base_ot_rate,
       return_home_rate: r.return_home_rate,
       work_shift: r.work_shift,
-      supervisor_id: r.supervisor_id,
+      group_id: r.group_id,
       created_at: r.created_at,
       account: hideAccount
         ? undefined
@@ -97,7 +102,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Employee 
     );
 
     const rows = await query<RowDataPacket[]>(
-      "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift, created_at FROM employees WHERE id = ?",
+      "SELECT id, emp_code, name, base_allowance, base_allowance_holiday, base_ot_rate, return_home_rate, work_shift, group_id, created_at FROM employees WHERE id = ?",
       [result.insertId]
     );
 

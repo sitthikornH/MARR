@@ -2,39 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import { hashPassword, isValidAdminPassword } from "@/lib/password";
-import type { ApiError, ReportScope, SupervisorAccount, SupervisorPermissionsUpdate } from "@/lib/types";
+import { SUPERVISOR_COLUMNS, toSupervisorAccount } from "@/lib/supervisorAccount";
+import type { ApiError, ReportAccess, SupervisorAccount, SupervisorPermissionsUpdate } from "@/lib/types";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 async function loadOne(id: number): Promise<SupervisorAccount | null> {
-  const rows = await query<RowDataPacket[]>(
-    `SELECT id, username, password_hash IS NOT NULL AS has_password, locked_until > NOW() AS locked,
-            can_manage_employees, can_manage_time_adjustment_history, timemint_scope, ot_scope, fixed_time_scope
-     FROM users WHERE id = ? AND role = 'supervisor'`,
-    [id]
-  );
-  const r = rows[0];
-  if (!r) return null;
-  const scope = (v: unknown): ReportScope => (v === "all" ? "all" : "own");
-  return {
-    id: r.id,
-    username: r.username,
-    has_password: Boolean(r.has_password),
-    locked: Boolean(r.locked),
-    can_manage_employees: Boolean(r.can_manage_employees),
-    can_manage_time_adjustment_history: Boolean(r.can_manage_time_adjustment_history),
-    timemint_scope: scope(r.timemint_scope),
-    ot_scope: scope(r.ot_scope),
-    fixed_time_scope: scope(r.fixed_time_scope),
-  };
+  const rows = await query<RowDataPacket[]>(`SELECT ${SUPERVISOR_COLUMNS} FROM users WHERE id = ? AND role = 'supervisor'`, [
+    id,
+  ]);
+  return rows[0] ? toSupervisorAccount(rows[0]) : null;
+}
+
+function isReportAccess(v: unknown): v is ReportAccess {
+  if (typeof v !== "object" || v === null) return false;
+  const a = v as Partial<ReportAccess>;
+  return typeof a.all === "boolean" && (a.group_id === null || (typeof a.group_id === "number" && Number.isInteger(a.group_id)));
 }
 
 /**
- * PUT { can_manage_employees, can_manage_time_adjustment_history, timemint_scope, ot_scope,
- * fixed_time_scope } (admin): sets this supervisor's permissions. Each is independent — not a
- * fixed set of presets — so an admin picks exactly the combination a given account needs.
+ * PUT { can_manage_employees, can_manage_time_adjustment_history, timemint, ot, fixed_time }
+ * (admin): sets this supervisor's permissions. Each is independent — not a fixed set of presets —
+ * so an admin picks exactly the combination a given account needs. For each of the 3 report
+ * accesses, `all: true` overrides `group_id` (normalized to null); otherwise `group_id` must name
+ * an existing employee group, or be null (sees nobody via that report).
  */
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse<SupervisorAccount | ApiError>> {
   const gate = await requireAuth(request, { admin: true });
@@ -43,29 +36,52 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
   if (!Number.isInteger(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
   const body = (await request.json().catch(() => ({}))) as Partial<SupervisorPermissionsUpdate>;
-  const isScope = (v: unknown): v is ReportScope => v === "own" || v === "all";
   if (
     typeof body.can_manage_employees !== "boolean" ||
     typeof body.can_manage_time_adjustment_history !== "boolean" ||
-    !isScope(body.timemint_scope) ||
-    !isScope(body.ot_scope) ||
-    !isScope(body.fixed_time_scope)
+    !isReportAccess(body.timemint) ||
+    !isReportAccess(body.ot) ||
+    !isReportAccess(body.fixed_time)
   ) {
     return NextResponse.json(
       {
         error:
-          "can_manage_employees, can_manage_time_adjustment_history (booleans) and timemint_scope, ot_scope, fixed_time_scope ('own' or 'all') are required",
+          "can_manage_employees, can_manage_time_adjustment_history (booleans) and timemint, ot, fixed_time ({ group_id, all }) are required",
       },
       { status: 400 }
     );
   }
 
+  const timemint: ReportAccess = { group_id: body.timemint.all ? null : body.timemint.group_id, all: body.timemint.all };
+  const ot: ReportAccess = { group_id: body.ot.all ? null : body.ot.group_id, all: body.ot.all };
+  const fixedTime: ReportAccess = { group_id: body.fixed_time.all ? null : body.fixed_time.group_id, all: body.fixed_time.all };
+
   try {
+    const groupIds = [timemint.group_id, ot.group_id, fixedTime.group_id].filter((g): g is number => g !== null);
+    if (groupIds.length > 0) {
+      const unique = [...new Set(groupIds)];
+      const rows = await query<RowDataPacket[]>(
+        `SELECT id FROM employee_groups WHERE id IN (${unique.map(() => "?").join(", ")})`,
+        unique
+      );
+      if (rows.length !== unique.length) return NextResponse.json({ error: "No such employee group" }, { status: 400 });
+    }
+
     const result = await execute(
       `UPDATE users SET can_manage_employees = ?, can_manage_time_adjustment_history = ?,
-              timemint_scope = ?, ot_scope = ?, fixed_time_scope = ?
+              timemint_group_id = ?, timemint_all = ?, ot_group_id = ?, ot_all = ?, fixed_time_group_id = ?, fixed_time_all = ?
        WHERE id = ? AND role = 'supervisor'`,
-      [body.can_manage_employees, body.can_manage_time_adjustment_history, body.timemint_scope, body.ot_scope, body.fixed_time_scope, id]
+      [
+        body.can_manage_employees,
+        body.can_manage_time_adjustment_history,
+        timemint.group_id,
+        timemint.all,
+        ot.group_id,
+        ot.all,
+        fixedTime.group_id,
+        fixedTime.all,
+        id,
+      ]
     );
     if (result.affectedRows === 0) return NextResponse.json({ error: "Supervisor not found" }, { status: 404 });
     return NextResponse.json((await loadOne(id))!, { status: 200 });
@@ -102,7 +118,7 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
   }
 }
 
-/** DELETE (admin): removes the supervisor account. Employees it was assigned to go unassigned (ON DELETE SET NULL). */
+/** DELETE (admin): removes the supervisor account. Employee groups are untouched — groups exist independently of any login. */
 export async function DELETE(request: NextRequest, { params }: RouteParams): Promise<NextResponse<{ success: true } | ApiError>> {
   const gate = await requireAuth(request, { admin: true });
   if ("response" in gate) return gate.response;

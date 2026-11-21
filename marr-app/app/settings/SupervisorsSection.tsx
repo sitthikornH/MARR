@@ -1,20 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ReportScope, SupervisorAccount, SupervisorPermissionsUpdate } from "@/lib/types";
+import type { EmployeeGroup, ReportAccess, SupervisorAccount, SupervisorPermissionsUpdate } from "@/lib/types";
 
-const SCOPE_OPTIONS: { value: ReportScope; label: string }[] = [
-  { value: "own", label: "Group#" },
-  { value: "all", label: "ALL Group" },
-];
+const NONE_VALUE = ""; // sees nobody via this report
+const ALL_VALUE = "all"; // every employee group
+
+/** Encodes a ReportAccess as a single <select> value: "" (none), "all", or the group id. */
+function accessValue(access: ReportAccess): string {
+  if (access.all) return ALL_VALUE;
+  return access.group_id === null ? NONE_VALUE : String(access.group_id);
+}
+
+function parseAccessValue(value: string): ReportAccess {
+  if (value === ALL_VALUE) return { group_id: null, all: true };
+  if (value === NONE_VALUE) return { group_id: null, all: false };
+  return { group_id: Number(value), all: false };
+}
 
 function permissionsOf(s: SupervisorAccount): SupervisorPermissionsUpdate {
   return {
     can_manage_employees: s.can_manage_employees,
     can_manage_time_adjustment_history: s.can_manage_time_adjustment_history,
-    timemint_scope: s.timemint_scope,
-    ot_scope: s.ot_scope,
-    fixed_time_scope: s.fixed_time_scope,
+    timemint: s.timemint,
+    ot: s.ot,
+    fixed_time: s.fixed_time,
   };
 }
 
@@ -25,6 +35,7 @@ function permissionsOf(s: SupervisorAccount): SupervisorPermissionsUpdate {
  */
 export default function SupervisorsSection() {
   const [supervisors, setSupervisors] = useState<SupervisorAccount[]>([]);
+  const [groups, setGroups] = useState<EmployeeGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -52,6 +63,10 @@ export default function SupervisorsSection() {
 
   useEffect(() => {
     load();
+    fetch("/api/employee-groups")
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setGroups)
+      .catch(() => {});
   }, []);
 
   async function handleCreate() {
@@ -124,7 +139,7 @@ export default function SupervisorsSection() {
   }
 
   async function handleDelete(supervisor: SupervisorAccount) {
-    if (!window.confirm(`Delete supervisor "${supervisor.username}"? Employees assigned to them become unassigned.`)) {
+    if (!window.confirm(`Delete supervisor "${supervisor.username}"?`)) {
       return;
     }
     setError(null);
@@ -147,10 +162,10 @@ export default function SupervisorsSection() {
       <div>
         <h2 className="text-base font-semibold text-gray-900">Supervisors</h2>
         <p className="mt-1 text-sm text-gray-500">
-          A supervisor always sees TimeMint, OT &amp; Work on holiday, and Fixed Time Request for the
-          employees assigned to them on the Employees page. The permissions below are independent
-          toggles an admin picks per account — set them to match any position (e.g. ADMIN-HR,
-          ADMIN-ACC, ADMIN-Project).
+          For each of TimeMint, OT &amp; Work on holiday, and Fixed Time Request, grant this account
+          a specific employee group, every group ("All groups"), or none. Several accounts may share
+          a group. The permissions below are independent toggles an admin picks per account — set
+          them to match any position (e.g. ADMIN-HR, ADMIN-ACC, ADMIN-Project).
         </p>
       </div>
 
@@ -229,42 +244,48 @@ export default function SupervisorsSection() {
                   </td>
                   <td className="px-3 py-2 text-center">
                     <select
-                      value={s.timemint_scope}
+                      value={accessValue(s.timemint)}
                       disabled={busyId === s.id}
-                      onChange={(e) => handlePermissionChange(s, { timemint_scope: e.target.value as ReportScope })}
+                      onChange={(e) => handlePermissionChange(s, { timemint: parseAccessValue(e.target.value) })}
                       className="rounded border border-gray-300 px-1 py-0.5 text-xs"
                     >
-                      {SCOPE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
+                      <option value={NONE_VALUE}>None</option>
+                      <option value={ALL_VALUE}>All groups</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
                         </option>
                       ))}
                     </select>
                   </td>
                   <td className="px-3 py-2 text-center">
                     <select
-                      value={s.ot_scope}
+                      value={accessValue(s.ot)}
                       disabled={busyId === s.id}
-                      onChange={(e) => handlePermissionChange(s, { ot_scope: e.target.value as ReportScope })}
+                      onChange={(e) => handlePermissionChange(s, { ot: parseAccessValue(e.target.value) })}
                       className="rounded border border-gray-300 px-1 py-0.5 text-xs"
                     >
-                      {SCOPE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
+                      <option value={NONE_VALUE}>None</option>
+                      <option value={ALL_VALUE}>All groups</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
                         </option>
                       ))}
                     </select>
                   </td>
                   <td className="px-3 py-2 text-center">
                     <select
-                      value={s.fixed_time_scope}
+                      value={accessValue(s.fixed_time)}
                       disabled={busyId === s.id}
-                      onChange={(e) => handlePermissionChange(s, { fixed_time_scope: e.target.value as ReportScope })}
+                      onChange={(e) => handlePermissionChange(s, { fixed_time: parseAccessValue(e.target.value) })}
                       className="rounded border border-gray-300 px-1 py-0.5 text-xs"
                     >
-                      {SCOPE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
+                      <option value={NONE_VALUE}>None</option>
+                      <option value={ALL_VALUE}>All groups</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
                         </option>
                       ))}
                     </select>

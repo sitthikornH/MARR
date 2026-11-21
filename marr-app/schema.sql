@@ -4,6 +4,16 @@
 CREATE DATABASE IF NOT EXISTS marr_db;
 USE marr_db;
 
+-- Named employee groups (e.g. SUB1, O&M, Solar1) an employee belongs to and a supervisor account
+-- can be granted access to (see users' 3 report group-access columns below) — independent of any
+-- particular supervisor login, so a group can exist with no employees or no supervisor yet.
+CREATE TABLE IF NOT EXISTS employee_groups (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT IGNORE INTO employee_groups (name) VALUES ('SUB1'), ('O&M'), ('SUB2'), ('Solar1'), ('Solar2'), ('Biomass');
+
 CREATE TABLE IF NOT EXISTS employees (
   id INT AUTO_INCREMENT PRIMARY KEY,
   emp_code VARCHAR(20) NOT NULL UNIQUE,
@@ -13,15 +23,23 @@ CREATE TABLE IF NOT EXISTS employees (
   base_ot_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
   return_home_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
   work_shift VARCHAR(11) NOT NULL DEFAULT '08:00-17:00', -- "08:00-17:00" | "08:30-17:30" (lib/workShift.ts)
-  supervisor_id INT NULL, -- users.id of role='supervisor'; FK added below (users is defined later)
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  group_id INT NULL, -- employee_groups.id; which named group this employee belongs to, set on the Employees page
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_employees_group FOREIGN KEY (group_id) REFERENCES employee_groups(id) ON DELETE SET NULL
 );
 -- Upgrade for databases whose employees predates work_shift (run once):
 -- ALTER TABLE employees ADD COLUMN work_shift VARCHAR(11) NOT NULL DEFAULT '08:00-17:00' AFTER return_home_rate;
--- Upgrade for databases whose employees predates supervisor_id (run once; users must exist first):
--- ALTER TABLE employees ADD COLUMN supervisor_id INT NULL AFTER work_shift;
--- ALTER TABLE employees ADD CONSTRAINT fk_employees_supervisor FOREIGN KEY (supervisor_id)
---   REFERENCES users(id) ON DELETE SET NULL;
+-- Upgrade for databases whose employees predates group_id (run once; employee_groups must exist first):
+-- ALTER TABLE employees ADD COLUMN group_id INT NULL AFTER work_shift;
+-- ALTER TABLE employees ADD CONSTRAINT fk_employees_group FOREIGN KEY (group_id)
+--   REFERENCES employee_groups(id) ON DELETE SET NULL;
+-- Upgrade for databases whose employees still has the old supervisor_id (a direct FK to a specific
+-- supervisor login, replaced 2026-11-21 by the group_id above so a group can be shared by several
+-- supervisor logins, or exist before anyone is assigned to it): backfill group_id from whichever
+-- group each supervisor login was renamed to, then drop the old column:
+-- UPDATE employees e JOIN users u ON u.id = e.supervisor_id JOIN employee_groups g ON g.name = '<new group name>'
+--   SET e.group_id = g.id WHERE u.username = '<old supervisor login>'; -- once per renamed login
+-- ALTER TABLE employees DROP FOREIGN KEY fk_employees_supervisor, DROP COLUMN supervisor_id;
 -- Upgrade for databases whose employees predates base_allowance_holiday (run once); backfill with the
 -- old 3.5x-of-base_allowance assumption from the Allowance Report so existing printouts don't change:
 -- ALTER TABLE employees ADD COLUMN base_allowance_holiday DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER base_allowance;
@@ -216,33 +234,50 @@ CREATE TABLE IF NOT EXISTS users (
   employee_id INT NULL UNIQUE,
   username VARCHAR(100) NOT NULL UNIQUE, -- stored lowercase
   password_hash VARCHAR(255) NULL, -- NULL = no password yet (admin must reset)
-  role VARCHAR(10) NOT NULL DEFAULT 'user', -- 'user' | 'admin' | 'supervisor' (restricted admin, see employees.supervisor_id)
+  role VARCHAR(10) NOT NULL DEFAULT 'user', -- 'user' | 'admin' | 'supervisor' (restricted admin, see employee_groups)
   must_change_password TINYINT(1) NOT NULL DEFAULT 1,
   failed_attempts INT NOT NULL DEFAULT 0,
   locked_until DATETIME NULL,
-  -- The next 5 columns only apply to role='supervisor'; each is an independent toggle an admin sets
+  -- The next 8 columns only apply to role='supervisor'; each is an independent toggle an admin sets
   -- per account on Settings > Supervisors (not a fixed set of presets).
   can_manage_employees TINYINT(1) NOT NULL DEFAULT 0, -- full Employees-page access, like an admin
   can_manage_time_adjustment_history TINYINT(1) NOT NULL DEFAULT 0, -- Settings > Time Adjustment History access
-  timemint_scope VARCHAR(3) NOT NULL DEFAULT 'own', -- 'own' (employees.supervisor_id assigned to them) | 'all', for the TimeMint report
-  ot_scope VARCHAR(3) NOT NULL DEFAULT 'own', -- same, for the OT & Work on holiday report
-  fixed_time_scope VARCHAR(3) NOT NULL DEFAULT 'own', -- same, for the Fixed Time Request report
+  -- One group-access pair per report form: NULL + *_all=0 = sees nobody via that report (the safe
+  -- default for a new account); *_all=1 = every employee group, regardless of *_group_id; otherwise
+  -- scoped to employee_groups.id = *_group_id. Several supervisor logins may share the same group.
+  timemint_group_id INT NULL,
+  timemint_all TINYINT(1) NOT NULL DEFAULT 0,
+  ot_group_id INT NULL,
+  ot_all TINYINT(1) NOT NULL DEFAULT 0,
+  fixed_time_group_id INT NULL,
+  fixed_time_all TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_users_employee FOREIGN KEY (employee_id)
-    REFERENCES employees(id) ON DELETE CASCADE
+    REFERENCES employees(id) ON DELETE CASCADE,
+  CONSTRAINT fk_users_timemint_group FOREIGN KEY (timemint_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL,
+  CONSTRAINT fk_users_ot_group FOREIGN KEY (ot_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL,
+  CONSTRAINT fk_users_fixed_time_group FOREIGN KEY (fixed_time_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL
 );
--- Upgrade for databases whose users predates the 5 supervisor-permission columns above (run once):
+-- Upgrade for databases whose users predates the 2 supervisor-permission columns above (run once):
 -- ALTER TABLE users
 --   ADD COLUMN can_manage_employees TINYINT(1) NOT NULL DEFAULT 0 AFTER locked_until,
---   ADD COLUMN can_manage_time_adjustment_history TINYINT(1) NOT NULL DEFAULT 0 AFTER can_manage_employees,
---   ADD COLUMN timemint_scope VARCHAR(3) NOT NULL DEFAULT 'own' AFTER can_manage_time_adjustment_history,
---   ADD COLUMN ot_scope VARCHAR(3) NOT NULL DEFAULT 'own' AFTER timemint_scope,
---   ADD COLUMN fixed_time_scope VARCHAR(3) NOT NULL DEFAULT 'own' AFTER ot_scope;
-
--- A supervisor account (role='supervisor', employee_id NULL) can view the TimeMint, OT & Work on
--- holiday, and Fixed Time Request forms (only) for the employees assigned to them below.
-ALTER TABLE employees ADD CONSTRAINT fk_employees_supervisor FOREIGN KEY (supervisor_id)
-  REFERENCES users(id) ON DELETE SET NULL;
+--   ADD COLUMN can_manage_time_adjustment_history TINYINT(1) NOT NULL DEFAULT 0 AFTER can_manage_employees;
+-- Upgrade for databases whose users still has the old timemint_scope/ot_scope/fixed_time_scope
+-- ('own'/'all' strings, replaced 2026-11-21 by the 6 group-access columns above so "own" can mean a
+-- named, shareable group instead of only "employees.supervisor_id = this login"):
+-- ALTER TABLE users
+--   ADD COLUMN timemint_group_id INT NULL AFTER can_manage_time_adjustment_history,
+--   ADD COLUMN timemint_all TINYINT(1) NOT NULL DEFAULT 0 AFTER timemint_group_id,
+--   ADD COLUMN ot_group_id INT NULL AFTER timemint_all,
+--   ADD COLUMN ot_all TINYINT(1) NOT NULL DEFAULT 0 AFTER ot_group_id,
+--   ADD COLUMN fixed_time_group_id INT NULL AFTER ot_all,
+--   ADD COLUMN fixed_time_all TINYINT(1) NOT NULL DEFAULT 0 AFTER fixed_time_group_id,
+--   ADD CONSTRAINT fk_users_timemint_group FOREIGN KEY (timemint_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL,
+--   ADD CONSTRAINT fk_users_ot_group FOREIGN KEY (ot_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL,
+--   ADD CONSTRAINT fk_users_fixed_time_group FOREIGN KEY (fixed_time_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL;
+-- UPDATE users SET timemint_all = (timemint_scope = 'all'), ot_all = (ot_scope = 'all'), fixed_time_all = (fixed_time_scope = 'all');
+-- -- then set each 'own' login's *_group_id to its mapped group (see the employees.group_id upgrade note above), and:
+-- ALTER TABLE users DROP COLUMN timemint_scope, DROP COLUMN ot_scope, DROP COLUMN fixed_time_scope;
 
 CREATE TABLE IF NOT EXISTS sessions (
   id INT AUTO_INCREMENT PRIMARY KEY,

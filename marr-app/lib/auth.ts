@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { execute, query, type RowDataPacket } from "@/lib/db";
 import { IDLE_TIMEOUT_MINUTES } from "@/lib/sessionRules";
-import type { ApiError, AuthUser, ReportScope } from "@/lib/types";
+import type { ApiError, AuthUser } from "@/lib/types";
 
 export const SESSION_COOKIE = "marr_session";
 const SESSION_HOURS = 12; // the longest a session can last, even when in constant use
@@ -66,7 +66,8 @@ export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
   const tokenHash = sha256(token);
   const rows = await query<RowDataPacket[]>(
     `SELECT u.id, u.username, u.role, u.employee_id, u.must_change_password, e.name AS employee_name,
-            u.can_manage_employees, u.can_manage_time_adjustment_history, u.timemint_scope, u.ot_scope, u.fixed_time_scope
+            u.can_manage_employees, u.can_manage_time_adjustment_history,
+            u.timemint_group_id, u.timemint_all, u.ot_group_id, u.ot_all, u.fixed_time_group_id, u.fixed_time_all
      FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN employees e ON e.id = u.employee_id
      WHERE s.token_hash = ? AND s.expires_at > NOW() AND s.last_active_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)`,
     [tokenHash, IDLE_TIMEOUT_MINUTES]
@@ -74,7 +75,6 @@ export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
   const row = rows[0];
   if (!row) return null;
   await execute("UPDATE sessions SET last_active_at = NOW() WHERE token_hash = ?", [tokenHash]);
-  const scope = (v: unknown): ReportScope => (v === "all" ? "all" : "own");
   return {
     user_id: row.id,
     username: row.username,
@@ -84,9 +84,12 @@ export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
     must_change_password: Boolean(row.must_change_password),
     can_manage_employees: Boolean(row.can_manage_employees),
     can_manage_time_adjustment_history: Boolean(row.can_manage_time_adjustment_history),
-    timemint_scope: scope(row.timemint_scope),
-    ot_scope: scope(row.ot_scope),
-    fixed_time_scope: scope(row.fixed_time_scope),
+    timemint_group_id: row.timemint_group_id,
+    timemint_all: Boolean(row.timemint_all),
+    ot_group_id: row.ot_group_id,
+    ot_all: Boolean(row.ot_all),
+    fixed_time_group_id: row.fixed_time_group_id,
+    fixed_time_all: Boolean(row.fixed_time_all),
   };
 }
 
@@ -138,22 +141,28 @@ export function canManageTimeAdjustmentHistory(auth: AuthUser): boolean {
   return auth.role === "admin" || (auth.role === "supervisor" && auth.can_manage_time_adjustment_history);
 }
 
-async function isSupervisorOf(userId: number, employeeId: number): Promise<boolean> {
-  const rows = await query<RowDataPacket[]>("SELECT 1 FROM employees WHERE id = ? AND supervisor_id = ?", [
+async function isInGroup(employeeId: number, groupId: number): Promise<boolean> {
+  const rows = await query<RowDataPacket[]>("SELECT 1 FROM employees WHERE id = ? AND group_id = ?", [
     employeeId,
-    userId,
+    groupId,
   ]);
   return rows.length > 0;
 }
 
 export type SupervisedReport = "timemint" | "ot" | "fixed_time";
 
+function reportAccess(auth: AuthUser, report: SupervisedReport): { groupId: number | null; all: boolean } {
+  if (report === "timemint") return { groupId: auth.timemint_group_id, all: auth.timemint_all };
+  if (report === "ot") return { groupId: auth.ot_group_id, all: auth.ot_all };
+  return { groupId: auth.fixed_time_group_id, all: auth.fixed_time_all };
+}
+
 /**
  * Like canAccessEmployee, but also lets a supervisor through for the three report routes they may
  * view (TimeMint, OT, Fixed Time Request) — everywhere else keeps using canAccessEmployee so
- * supervisors stay out of Welfare/Allowance/Mileage. A supervisor whose scope for that report is
- * 'all' (Settings > Supervisors) sees every employee there; otherwise only the ones assigned to
- * them (employees.supervisor_id).
+ * supervisors stay out of Welfare/Allowance/Mileage. A supervisor granted "all" for that report
+ * (Settings > Supervisors) sees every employee there; one granted a specific group sees only
+ * employees in it; one granted neither sees nobody via that report.
  */
 export async function canAccessSupervisedEmployee(
   auth: AuthUser,
@@ -162,21 +171,37 @@ export async function canAccessSupervisedEmployee(
 ): Promise<boolean> {
   if (canAccessEmployee(auth, employeeId)) return true;
   if (auth.role !== "supervisor") return false;
-  const scope: ReportScope =
-    report === "timemint" ? auth.timemint_scope : report === "ot" ? auth.ot_scope : auth.fixed_time_scope;
-  if (scope === "all") return true;
-  return isSupervisorOf(auth.user_id, employeeId);
+  const { groupId, all } = reportAccess(auth, report);
+  if (all) return true;
+  if (groupId === null) return false;
+  return isInGroup(employeeId, groupId);
 }
 
 /**
  * Which employees a supervisor may submit Time Adjustment/OT history records for (Settings >
- * Time Adjustment History): every employee if they also have full Employees access, else only the
- * ones assigned to them.
+ * Time Adjustment History): every employee if they also have full Employees access, else anyone
+ * reachable through any of their three report grants (there's no separate scope just for this).
  */
 export async function canManageEmployeeHistory(auth: AuthUser, employeeId: number): Promise<boolean> {
   if (canManageEmployees(auth)) return true;
-  if (auth.role === "supervisor") return isSupervisorOf(auth.user_id, employeeId);
-  return false;
+  return (
+    (await canAccessSupervisedEmployee(auth, employeeId, "timemint")) ||
+    (await canAccessSupervisedEmployee(auth, employeeId, "ot")) ||
+    (await canAccessSupervisedEmployee(auth, employeeId, "fixed_time"))
+  );
+}
+
+/**
+ * Which employees a plain supervisor (without full Employees access) may see at all — used to
+ * scope GET /api/employees, e.g. for the /supervisor picker and Settings > Time Adjustment
+ * History's employee list. `allowAll: true` means no filter is needed (every employee is visible
+ * through at least one of their three report grants).
+ */
+export function supervisorGroupFilter(auth: AuthUser): { allowAll: boolean; groupIds: number[] } {
+  const accesses = [reportAccess(auth, "timemint"), reportAccess(auth, "ot"), reportAccess(auth, "fixed_time")];
+  if (accesses.some((a) => a.all)) return { allowAll: true, groupIds: [] };
+  const groupIds = [...new Set(accesses.map((a) => a.groupId).filter((g): g is number => g !== null))];
+  return { allowAll: false, groupIds };
 }
 
 export const forbidden = () => NextResponse.json({ error: "You can only view your own records" }, { status: 403 });

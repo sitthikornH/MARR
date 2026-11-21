@@ -7,18 +7,29 @@ export interface Employee {
   base_ot_rate: number;
   return_home_rate: number;
   work_shift: string; // "08:00-17:00" | "08:30-17:30" (lib/workShift.ts) - used for late check-in
-  supervisor_id: number | null; // users.id of role='supervisor' assigned to view this employee's reports
+  group_id: number | null; // employee_groups.id this employee belongs to
   created_at: string;
   // Login account, only in the admin listing (GET /api/employees); null = no account yet
   account?: EmployeeAccount | null;
 }
 
-/** 'own' = only employees.supervisor_id assigned to this account; 'all' = every employee. */
-export type ReportScope = "own" | "all";
+/** A named group of employees (e.g. "SUB1", "O&M"), independent of any particular supervisor login —
+ *  see SupervisorAccount's per-report group-access fields. Managed on Settings > Employee Groups. */
+export interface EmployeeGroup {
+  id: number;
+  name: string;
+}
+
+/** One report form's visibility for a supervisor account: every employee group (`all`), or only
+ *  `group_id`'s (null + not `all` = sees nobody via this report, the safe default for a new account). */
+export interface ReportAccess {
+  group_id: number | null;
+  all: boolean;
+}
 
 /** A restricted-admin account (role='supervisor', no employee_id) for the Employees page's
- *  Supervisor column and Settings > Supervisors. Each permission below is an independent toggle
- *  an admin sets per account (not a fixed set of presets). */
+ *  Group column and Settings > Supervisors. Each permission below is an independent toggle an
+ *  admin sets per account (not a fixed set of presets); several accounts may share one group. */
 export interface SupervisorAccount {
   id: number;
   username: string;
@@ -26,14 +37,14 @@ export interface SupervisorAccount {
   locked: boolean;
   can_manage_employees: boolean; // full Employees-page access, like an admin
   can_manage_time_adjustment_history: boolean; // Settings > Time Adjustment History access
-  timemint_scope: ReportScope;
-  ot_scope: ReportScope;
-  fixed_time_scope: ReportScope;
+  timemint: ReportAccess;
+  ot: ReportAccess;
+  fixed_time: ReportAccess;
 }
 
 export type SupervisorPermissionsUpdate = Pick<
   SupervisorAccount,
-  "can_manage_employees" | "can_manage_time_adjustment_history" | "timemint_scope" | "ot_scope" | "fixed_time_scope"
+  "can_manage_employees" | "can_manage_time_adjustment_history" | "timemint" | "ot" | "fixed_time"
 >;
 
 export interface EmployeeAccount {
@@ -56,7 +67,7 @@ export type NewEmployee = Pick<
 
 export type EmployeeRatesUpdate = Pick<
   Employee,
-  "base_allowance" | "base_allowance_holiday" | "base_ot_rate" | "return_home_rate" | "work_shift" | "supervisor_id"
+  "base_allowance" | "base_allowance_holiday" | "base_ot_rate" | "return_home_rate" | "work_shift" | "group_id"
 >;
 
 export interface LocationRate {
@@ -298,12 +309,15 @@ export interface AuthUser {
   employee_id: number | null; // null for admin-only accounts
   employee_name: string | null;
   must_change_password: boolean;
-  // Meaningful only when role === 'supervisor'; see SupervisorAccount.
+  // Meaningful only when role === 'supervisor'; see SupervisorAccount's ReportAccess fields.
   can_manage_employees: boolean;
   can_manage_time_adjustment_history: boolean;
-  timemint_scope: ReportScope;
-  ot_scope: ReportScope;
-  fixed_time_scope: ReportScope;
+  timemint_group_id: number | null;
+  timemint_all: boolean;
+  ot_group_id: number | null;
+  ot_all: boolean;
+  fixed_time_group_id: number | null;
+  fixed_time_all: boolean;
 }
 
 export interface CompanyImportEmployee {
