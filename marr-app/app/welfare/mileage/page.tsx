@@ -354,8 +354,11 @@ function FormView() {
                       </>
                     );
 
+                    // A company holiday or leave day's colour always shows, even before its legs are
+                    // submitted; "needs submission" only tints a plain workday (the Submit button
+                    // already says that on every other row type).
                     return (
-                      <tr key={key} className={dirty ? `bg-amber-50 ${highlight.printBg}` : highlight.bg}>
+                      <tr key={key} className={highlight.bg || (dirty ? "bg-amber-50" : "")}>
                         <td className={`${cell} text-center`}>{formatDate(day.date)}</td>
                         <td className={cell}>{field("time")}</td>
                         <td className={cell}>{field("from_place")}</td>
