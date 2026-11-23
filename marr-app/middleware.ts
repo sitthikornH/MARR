@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 // Without a session cookie, pages redirect to /login and API calls get 401. This only checks that
 // the cookie exists; every route handler validates the session itself (lib/auth.ts requireAuth).
 const SESSION_COOKIE = "marr_session";
-const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/login-bg.jpg"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

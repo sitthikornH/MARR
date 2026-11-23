@@ -39,52 +39,59 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="mx-auto mt-16 max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <h1 className="text-xl font-semibold text-gray-900">Project MARR</h1>
-      <p className="mt-1 text-sm text-gray-500">Sign in to see your welfare reports.</p>
-      {expired && (
-        <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          ไม่มีการใช้งานเกิน 30 นาที กรุณาเข้าสู่ระบบอีกครั้ง
+    <>
+      <div
+        className="fixed inset-0 -z-10 bg-cover bg-top"
+        style={{ backgroundImage: "url(/login-bg.jpg)" }}
+      />
+      <div className="fixed inset-0 -z-10 bg-black/40" />
+      <div className="mx-auto mt-16 max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-lg">
+        <h1 className="text-xl font-semibold text-gray-900">Project MARR</h1>
+        <p className="mt-1 text-sm text-gray-500">Sign in to see your welfare reports.</p>
+        {expired && (
+          <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            ไม่มีการใช้งานเกิน 30 นาที กรุณาเข้าสู่ระบบอีกครั้ง
+          </p>
+        )}
+
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Username</label>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              autoFocus
+              placeholder="Email name before @"
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Password / PIN</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              placeholder="First login: your phone number"
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={submitting || !username || !password}
+            className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            {submitting ? "Signing in..." : "Sign in"}
+          </button>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </form>
+
+        <p className="mt-6 text-xs text-gray-500">
+          Username is the part of your email before @ (or your employee code if you have no email). The first
+          time, your password is the phone number registered in TimeMint; you will then set a 4-digit PIN.
         </p>
-      )}
-
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Username</label>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
-            autoFocus
-            placeholder="Email name before @"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Password / PIN</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            placeholder="First login: your phone number"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={submitting || !username || !password}
-          className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
-        >
-          {submitting ? "Signing in..." : "Sign in"}
-        </button>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-      </form>
-
-      <p className="mt-6 text-xs text-gray-500">
-        Username is the part of your email before @ (or your employee code if you have no email). The first
-        time, your password is the phone number registered in TimeMint; you will then set a 4-digit PIN.
-      </p>
-    </div>
+      </div>
+    </>
   );
 }
