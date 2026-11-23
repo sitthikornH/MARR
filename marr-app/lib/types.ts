@@ -40,11 +40,19 @@ export interface SupervisorAccount {
   timemint: ReportAccess;
   ot: ReportAccess;
   fixed_time: ReportAccess;
+  allowance: ReportAccess;
+  mileage: ReportAccess;
 }
 
 export type SupervisorPermissionsUpdate = Pick<
   SupervisorAccount,
-  "can_manage_employees" | "can_manage_time_adjustment_history" | "timemint" | "ot" | "fixed_time"
+  | "can_manage_employees"
+  | "can_manage_time_adjustment_history"
+  | "timemint"
+  | "ot"
+  | "fixed_time"
+  | "allowance"
+  | "mileage"
 >;
 
 export interface EmployeeAccount {
@@ -318,6 +326,10 @@ export interface AuthUser {
   ot_all: boolean;
   fixed_time_group_id: number | null;
   fixed_time_all: boolean;
+  allowance_group_id: number | null;
+  allowance_all: boolean;
+  mileage_group_id: number | null;
+  mileage_all: boolean;
 }
 
 export interface CompanyImportEmployee {

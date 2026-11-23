@@ -156,11 +156,17 @@ export async function runEmployeeSync(): Promise<EmployeeSyncResult> {
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
+      // New employees default to the "No group" group (never touched again by the sync) so every
+      // employee always has a real, selectable group — see employee_groups' seed row.
+      const [noGroupRows] = await connection.execute<RowDataPacket[]>(
+        "SELECT id FROM employee_groups WHERE name = 'No group'"
+      );
+      const noGroupId: number | null = noGroupRows[0]?.id ?? null;
       for (const record of records) {
         // New employees get the default (0) welfare rates; existing rates are never overwritten.
         const [res] = await connection.execute<ResultSetHeader>(
-          "INSERT INTO employees (emp_code, name) VALUES (?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)",
-          [record.emp_code, record.name]
+          "INSERT INTO employees (emp_code, name, group_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)",
+          [record.emp_code, record.name, noGroupId]
         );
         // This connection reports affectedRows as 1 for BOTH a new insert and an existing-but-unchanged
         // row (confirmed empirically against this server), and 2 only when an existing row's name

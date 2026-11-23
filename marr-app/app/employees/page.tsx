@@ -450,7 +450,11 @@ export default function EmployeesPage() {
                             onChange={(e) => setRate(employee, field, e.target.value ? Number(e.target.value) : null)}
                             className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-400"
                           >
-                            <option value="">(none)</option>
+                            {editedRates(employee).group_id === null && (
+                              <option value="" disabled>
+                                (no group set)
+                              </option>
+                            )}
                             {groups.map((g) => (
                               <option key={g.id} value={g.id}>
                                 {g.name}

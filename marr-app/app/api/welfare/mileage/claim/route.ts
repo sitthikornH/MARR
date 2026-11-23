@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
+import { canAccessSupervisedEmployee, forbidden, requireAuth } from "@/lib/auth";
 import pool, { type ResultSetHeader } from "@/lib/db";
 import type { ApiError, MileageClaimRequest, MileageOtherItem } from "@/lib/types";
 
@@ -45,7 +45,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse<{ success:
   }
 
   const employeeId: number = employee_id as number;
-  if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
+  if (!(await canAccessSupervisedEmployee(gate.auth, employeeId, "mileage"))) return forbidden();
   const monthNum: number = month as number;
   const yearNum: number = year as number;
   const rate: number = rate_per_km;

@@ -17,11 +17,11 @@ async function loadOne(id: number): Promise<SupervisorAccount | null> {
 }
 
 /**
- * PUT { can_manage_employees, can_manage_time_adjustment_history, timemint, ot, fixed_time }
- * (admin): sets this supervisor's permissions. Each is independent — not a fixed set of presets —
- * so an admin picks exactly the combination a given account needs. For each of the 3 report
- * accesses, `all: true` overrides `group_id` (normalized to null); otherwise `group_id` must name
- * an existing employee group, or be null (sees nobody via that report).
+ * PUT { can_manage_employees, can_manage_time_adjustment_history, timemint, ot, fixed_time,
+ * allowance, mileage } (admin): sets this supervisor's permissions. Each is independent — not a
+ * fixed set of presets — so an admin picks exactly the combination a given account needs. For each
+ * of the 5 report accesses, `all: true` overrides `group_id` (normalized to null); otherwise
+ * `group_id` must name an existing employee group, or be null (sees nobody via that report).
  */
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse<SupervisorAccount | ApiError>> {
   const gate = await requireAuth(request, { admin: true });
@@ -35,12 +35,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     typeof body.can_manage_time_adjustment_history !== "boolean" ||
     !isReportAccess(body.timemint) ||
     !isReportAccess(body.ot) ||
-    !isReportAccess(body.fixed_time)
+    !isReportAccess(body.fixed_time) ||
+    !isReportAccess(body.allowance) ||
+    !isReportAccess(body.mileage)
   ) {
     return NextResponse.json(
       {
         error:
-          "can_manage_employees, can_manage_time_adjustment_history (booleans) and timemint, ot, fixed_time ({ group_id, all }) are required",
+          "can_manage_employees, can_manage_time_adjustment_history (booleans) and timemint, ot, fixed_time, allowance, mileage ({ group_id, all }) are required",
       },
       { status: 400 }
     );
@@ -49,16 +51,21 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
   const timemint: ReportAccess = normalizeReportAccess(body.timemint);
   const ot: ReportAccess = normalizeReportAccess(body.ot);
   const fixedTime: ReportAccess = normalizeReportAccess(body.fixed_time);
+  const allowance: ReportAccess = normalizeReportAccess(body.allowance);
+  const mileage: ReportAccess = normalizeReportAccess(body.mileage);
 
   try {
-    const groupIds = [timemint.group_id, ot.group_id, fixedTime.group_id].filter((g): g is number => g !== null);
+    const groupIds = [timemint.group_id, ot.group_id, fixedTime.group_id, allowance.group_id, mileage.group_id].filter(
+      (g): g is number => g !== null
+    );
     if (!(await groupIdsExist(groupIds))) {
       return NextResponse.json({ error: "No such employee group" }, { status: 400 });
     }
 
     const result = await execute(
       `UPDATE users SET can_manage_employees = ?, can_manage_time_adjustment_history = ?,
-              timemint_group_id = ?, timemint_all = ?, ot_group_id = ?, ot_all = ?, fixed_time_group_id = ?, fixed_time_all = ?
+              timemint_group_id = ?, timemint_all = ?, ot_group_id = ?, ot_all = ?, fixed_time_group_id = ?, fixed_time_all = ?,
+              allowance_group_id = ?, allowance_all = ?, mileage_group_id = ?, mileage_all = ?
        WHERE id = ? AND role = 'supervisor'`,
       [
         body.can_manage_employees,
@@ -69,6 +76,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
         ot.all,
         fixedTime.group_id,
         fixedTime.all,
+        allowance.group_id,
+        allowance.all,
+        mileage.group_id,
+        mileage.all,
         id,
       ]
     );

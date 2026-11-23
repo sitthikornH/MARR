@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import HighlightLegend from "@/app/welfare/HighlightLegend";
+import { useBackBase } from "@/app/welfare/useBackBase";
 import { dayHighlight, PRINT_COLORS_CSS } from "@/lib/dayHighlight";
 import type { AllowanceReportDay, MileageEntry, MileageForm, MileageOtherItem } from "@/lib/types";
 
@@ -50,6 +51,7 @@ function FormView() {
   const employeeId = params.get("employee_id");
   const month = params.get("month");
   const year = params.get("year");
+  const backBase = useBackBase();
 
   const [form, setForm] = useState<MileageForm | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -223,7 +225,7 @@ function FormView() {
       <style>{`@media print { @page { size: A4; margin: 8mm; } body { background: white !important; } ${PRINT_COLORS_CSS} }`}</style>
 
       <div className="print:hidden flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <Link href={`/welfare?employee_id=${employeeId}&month=${month}&year=${year}`} className="text-sm text-gray-600 underline">
+        <Link href={`${backBase}?employee_id=${employeeId}&month=${month}&year=${year}`} className="text-sm text-gray-600 underline">
           ← Back
         </Link>
         <p className="text-sm text-gray-700">

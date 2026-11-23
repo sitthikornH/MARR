@@ -67,7 +67,8 @@ export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
   const rows = await query<RowDataPacket[]>(
     `SELECT u.id, u.username, u.role, u.employee_id, u.must_change_password, e.name AS employee_name,
             u.can_manage_employees, u.can_manage_time_adjustment_history,
-            u.timemint_group_id, u.timemint_all, u.ot_group_id, u.ot_all, u.fixed_time_group_id, u.fixed_time_all
+            u.timemint_group_id, u.timemint_all, u.ot_group_id, u.ot_all, u.fixed_time_group_id, u.fixed_time_all,
+            u.allowance_group_id, u.allowance_all, u.mileage_group_id, u.mileage_all
      FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN employees e ON e.id = u.employee_id
      WHERE s.token_hash = ? AND s.expires_at > NOW() AND s.last_active_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)`,
     [tokenHash, IDLE_TIMEOUT_MINUTES]
@@ -90,6 +91,10 @@ export async function getAuth(request: NextRequest): Promise<AuthUser | null> {
     ot_all: Boolean(row.ot_all),
     fixed_time_group_id: row.fixed_time_group_id,
     fixed_time_all: Boolean(row.fixed_time_all),
+    allowance_group_id: row.allowance_group_id,
+    allowance_all: Boolean(row.allowance_all),
+    mileage_group_id: row.mileage_group_id,
+    mileage_all: Boolean(row.mileage_all),
   };
 }
 
@@ -125,7 +130,7 @@ export async function requireAuth(
 }
 
 /** Admins see every employee; a user sees only their own record. Supervisors never pass this one
- *  (they have no employee_id) — see canAccessSupervisedEmployee for their scoped three forms. */
+ *  (they have no employee_id) — see canAccessSupervisedEmployee for their scoped report forms. */
 export function canAccessEmployee(auth: AuthUser, employeeId: number): boolean {
   return auth.role === "admin" || auth.employee_id === employeeId;
 }
@@ -149,20 +154,22 @@ async function isInGroup(employeeId: number, groupId: number): Promise<boolean> 
   return rows.length > 0;
 }
 
-export type SupervisedReport = "timemint" | "ot" | "fixed_time";
+export type SupervisedReport = "timemint" | "ot" | "fixed_time" | "allowance" | "mileage";
 
 function reportAccess(auth: AuthUser, report: SupervisedReport): { groupId: number | null; all: boolean } {
   if (report === "timemint") return { groupId: auth.timemint_group_id, all: auth.timemint_all };
   if (report === "ot") return { groupId: auth.ot_group_id, all: auth.ot_all };
-  return { groupId: auth.fixed_time_group_id, all: auth.fixed_time_all };
+  if (report === "fixed_time") return { groupId: auth.fixed_time_group_id, all: auth.fixed_time_all };
+  if (report === "allowance") return { groupId: auth.allowance_group_id, all: auth.allowance_all };
+  return { groupId: auth.mileage_group_id, all: auth.mileage_all };
 }
 
 /**
- * Like canAccessEmployee, but also lets a supervisor through for the three report routes they may
- * view (TimeMint, OT, Fixed Time Request) — everywhere else keeps using canAccessEmployee so
- * supervisors stay out of Welfare/Allowance/Mileage. A supervisor granted "all" for that report
- * (Settings > Supervisors) sees every employee there; one granted a specific group sees only
- * employees in it; one granted neither sees nobody via that report.
+ * Like canAccessEmployee, but also lets a supervisor through for the five report routes they may
+ * view (TimeMint, OT, Fixed Time Request, Allowance Report, Mileage) — everywhere else keeps using
+ * canAccessEmployee (e.g. Welfare Summary, /api/employees/[id] without can_manage_employees). A
+ * supervisor granted "all" for that report (Settings > Supervisors) sees every employee there; one
+ * granted a specific group sees only employees in it; one granted neither sees nobody via that report.
  */
 export async function canAccessSupervisedEmployee(
   auth: AuthUser,
@@ -180,14 +187,16 @@ export async function canAccessSupervisedEmployee(
 /**
  * Which employees a supervisor may submit Time Adjustment/OT history records for (Settings >
  * Time Adjustment History): every employee if they also have full Employees access, else anyone
- * reachable through any of their three report grants (there's no separate scope just for this).
+ * reachable through any of their five report grants (there's no separate scope just for this).
  */
 export async function canManageEmployeeHistory(auth: AuthUser, employeeId: number): Promise<boolean> {
   if (canManageEmployees(auth)) return true;
   return (
     (await canAccessSupervisedEmployee(auth, employeeId, "timemint")) ||
     (await canAccessSupervisedEmployee(auth, employeeId, "ot")) ||
-    (await canAccessSupervisedEmployee(auth, employeeId, "fixed_time"))
+    (await canAccessSupervisedEmployee(auth, employeeId, "fixed_time")) ||
+    (await canAccessSupervisedEmployee(auth, employeeId, "allowance")) ||
+    (await canAccessSupervisedEmployee(auth, employeeId, "mileage"))
   );
 }
 
@@ -195,10 +204,16 @@ export async function canManageEmployeeHistory(auth: AuthUser, employeeId: numbe
  * Which employees a plain supervisor (without full Employees access) may see at all — used to
  * scope GET /api/employees, e.g. for the /supervisor picker and Settings > Time Adjustment
  * History's employee list. `allowAll: true` means no filter is needed (every employee is visible
- * through at least one of their three report grants).
+ * through at least one of their five report grants).
  */
 export function supervisorGroupFilter(auth: AuthUser): { allowAll: boolean; groupIds: number[] } {
-  const accesses = [reportAccess(auth, "timemint"), reportAccess(auth, "ot"), reportAccess(auth, "fixed_time")];
+  const accesses = [
+    reportAccess(auth, "timemint"),
+    reportAccess(auth, "ot"),
+    reportAccess(auth, "fixed_time"),
+    reportAccess(auth, "allowance"),
+    reportAccess(auth, "mileage"),
+  ];
   if (accesses.some((a) => a.all)) return { allowAll: true, groupIds: [] };
   const groupIds = [...new Set(accesses.map((a) => a.groupId).filter((g): g is number => g !== null))];
   return { allowAll: false, groupIds };

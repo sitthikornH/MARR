@@ -18,7 +18,7 @@ const USER_LINKS = [{ href: "/welfare", label: "Welfare Summary" }];
 // Pages an employee (role user) may open; anything else sends them to Welfare Summary.
 const USER_PAGES = ["/welfare", "/welfare/allowance-report", "/welfare/mileage", "/welfare/timemint", "/welfare/ot", "/welfare/fixed-time", "/change-password"];
 
-/** A supervisor always gets their picker page and the three forms it opens (lib/auth.ts
+/** A supervisor always gets their picker page and the five forms it opens (lib/auth.ts
  *  canAccessSupervisedEmployee); Employees and Settings are extra, independent permissions set on
  *  Settings > Supervisors (lib/auth.ts canManageEmployees/canManageTimeAdjustmentHistory). */
 function supervisorLinks(me: AuthUser): { href: string; label: string }[] {
@@ -29,7 +29,15 @@ function supervisorLinks(me: AuthUser): { href: string; label: string }[] {
 }
 
 function supervisorPages(me: AuthUser): string[] {
-  const pages = ["/supervisor", "/welfare/timemint", "/welfare/ot", "/welfare/fixed-time", "/change-password"];
+  const pages = [
+    "/supervisor",
+    "/welfare/timemint",
+    "/welfare/ot",
+    "/welfare/fixed-time",
+    "/welfare/allowance-report",
+    "/welfare/mileage",
+    "/change-password",
+  ];
   if (me.can_manage_employees) pages.push("/employees");
   if (me.can_manage_time_adjustment_history) pages.push("/settings");
   return pages;

@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS employee_groups (
   name VARCHAR(100) NOT NULL UNIQUE,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-INSERT IGNORE INTO employee_groups (name) VALUES ('SUB1'), ('O&M'), ('SUB2'), ('Solar1'), ('Solar2'), ('Biomass');
+-- 'No group' is a real, permanent group every ungrouped employee is assigned to (not NULL) so it's
+-- directly selectable like any other group when granting a supervisor's report access.
+INSERT IGNORE INTO employee_groups (name) VALUES ('No group'), ('SUB1'), ('O&M'), ('SUB2'), ('Solar1'), ('Solar2'), ('Biomass');
 
 CREATE TABLE IF NOT EXISTS employees (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -23,7 +25,7 @@ CREATE TABLE IF NOT EXISTS employees (
   base_ot_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
   return_home_rate DECIMAL(10,2) NOT NULL DEFAULT 0,
   work_shift VARCHAR(11) NOT NULL DEFAULT '08:00-17:00', -- "08:00-17:00" | "08:30-17:30" (lib/workShift.ts)
-  group_id INT NULL, -- employee_groups.id; which named group this employee belongs to, set on the Employees page
+  group_id INT NULL, -- employee_groups.id; which named group this employee belongs to (defaults to 'No group' at creation), set on the Employees page
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_employees_group FOREIGN KEY (group_id) REFERENCES employee_groups(id) ON DELETE SET NULL
 );
@@ -40,6 +42,10 @@ CREATE TABLE IF NOT EXISTS employees (
 -- UPDATE employees e JOIN users u ON u.id = e.supervisor_id JOIN employee_groups g ON g.name = '<new group name>'
 --   SET e.group_id = g.id WHERE u.username = '<old supervisor login>'; -- once per renamed login
 -- ALTER TABLE employees DROP FOREIGN KEY fk_employees_supervisor, DROP COLUMN supervisor_id;
+-- Upgrade for databases whose employee_groups predates the 'No group' row (added 2026-11-23 so
+-- ungrouped employees have a real, selectable group instead of NULL; run once):
+-- INSERT IGNORE INTO employee_groups (name) VALUES ('No group');
+-- UPDATE employees SET group_id = (SELECT id FROM employee_groups WHERE name = 'No group') WHERE group_id IS NULL;
 -- Upgrade for databases whose employees predates base_allowance_holiday (run once); backfill with the
 -- old 3.5x-of-base_allowance assumption from the Allowance Report so existing printouts don't change:
 -- ALTER TABLE employees ADD COLUMN base_allowance_holiday DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER base_allowance;
@@ -251,12 +257,18 @@ CREATE TABLE IF NOT EXISTS users (
   ot_all TINYINT(1) NOT NULL DEFAULT 0,
   fixed_time_group_id INT NULL,
   fixed_time_all TINYINT(1) NOT NULL DEFAULT 0,
+  allowance_group_id INT NULL,
+  allowance_all TINYINT(1) NOT NULL DEFAULT 0,
+  mileage_group_id INT NULL,
+  mileage_all TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_users_employee FOREIGN KEY (employee_id)
     REFERENCES employees(id) ON DELETE CASCADE,
   CONSTRAINT fk_users_timemint_group FOREIGN KEY (timemint_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL,
   CONSTRAINT fk_users_ot_group FOREIGN KEY (ot_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL,
-  CONSTRAINT fk_users_fixed_time_group FOREIGN KEY (fixed_time_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL
+  CONSTRAINT fk_users_fixed_time_group FOREIGN KEY (fixed_time_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL,
+  CONSTRAINT fk_users_allowance_group FOREIGN KEY (allowance_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL,
+  CONSTRAINT fk_users_mileage_group FOREIGN KEY (mileage_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL
 );
 -- Upgrade for databases whose users predates the 2 supervisor-permission columns above (run once):
 -- ALTER TABLE users
@@ -278,6 +290,16 @@ CREATE TABLE IF NOT EXISTS users (
 -- UPDATE users SET timemint_all = (timemint_scope = 'all'), ot_all = (ot_scope = 'all'), fixed_time_all = (fixed_time_scope = 'all');
 -- -- then set each 'own' login's *_group_id to its mapped group (see the employees.group_id upgrade note above), and:
 -- ALTER TABLE users DROP COLUMN timemint_scope, DROP COLUMN ot_scope, DROP COLUMN fixed_time_scope;
+-- Upgrade for databases whose users predates the allowance/mileage report-access columns above
+-- (added 2026-11-23 so a supervisor can also be granted the Allowance Report and Mileage forms,
+-- the same group-or-all pattern as timemint/ot/fixed_time; run once):
+-- ALTER TABLE users
+--   ADD COLUMN allowance_group_id INT NULL AFTER fixed_time_all,
+--   ADD COLUMN allowance_all TINYINT(1) NOT NULL DEFAULT 0 AFTER allowance_group_id,
+--   ADD COLUMN mileage_group_id INT NULL AFTER allowance_all,
+--   ADD COLUMN mileage_all TINYINT(1) NOT NULL DEFAULT 0 AFTER mileage_group_id,
+--   ADD CONSTRAINT fk_users_allowance_group FOREIGN KEY (allowance_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL,
+--   ADD CONSTRAINT fk_users_mileage_group FOREIGN KEY (mileage_group_id) REFERENCES employee_groups(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS sessions (
   id INT AUTO_INCREMENT PRIMARY KEY,

@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import type { AuthUser } from "@/lib/types";
 
-/** Where the TimeMint/OT/Fixed Time Request pages' "Back" link should go: /supervisor for a
- *  supervisor, /welfare for everyone else (admin or user). */
+/** Where the TimeMint/OT/Fixed Time Request/Allowance Report/Mileage pages' "Back" link should go:
+ *  /supervisor for a supervisor, /welfare for everyone else (admin or user). */
 export function useBackBase(): string {
   const [base, setBase] = useState("/welfare");
   useEffect(() => {

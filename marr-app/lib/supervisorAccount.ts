@@ -31,7 +31,8 @@ export async function groupIdsExist(groupIds: number[]): Promise<boolean> {
 export const SUPERVISOR_COLUMNS =
   "id, username, password_hash IS NOT NULL AS has_password, locked_until > NOW() AS locked, " +
   "can_manage_employees, can_manage_time_adjustment_history, " +
-  "timemint_group_id, timemint_all, ot_group_id, ot_all, fixed_time_group_id, fixed_time_all";
+  "timemint_group_id, timemint_all, ot_group_id, ot_all, fixed_time_group_id, fixed_time_all, " +
+  "allowance_group_id, allowance_all, mileage_group_id, mileage_all";
 
 export function toSupervisorAccount(r: RowDataPacket): SupervisorAccount {
   return {
@@ -44,5 +45,7 @@ export function toSupervisorAccount(r: RowDataPacket): SupervisorAccount {
     timemint: { group_id: r.timemint_group_id, all: Boolean(r.timemint_all) },
     ot: { group_id: r.ot_group_id, all: Boolean(r.ot_all) },
     fixed_time: { group_id: r.fixed_time_group_id, all: Boolean(r.fixed_time_all) },
+    allowance: { group_id: r.allowance_group_id, all: Boolean(r.allowance_all) },
+    mileage: { group_id: r.mileage_group_id, all: Boolean(r.mileage_all) },
   };
 }

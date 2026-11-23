@@ -11,7 +11,7 @@ const MONTH_NAMES = Array.from({ length: 12 }, (_, i) =>
 const employeeLabel = (employee: Employee) => `${employee.emp_code} - ${employee.name}`;
 
 /** Landing page for role='supervisor': pick one of the employees assigned to them, then open one
- *  of the three forms they're allowed to view (lib/auth.ts canAccessSupervisedEmployee). */
+ *  of the forms they're allowed to view (lib/auth.ts canAccessSupervisedEmployee). */
 export default function SupervisorPage() {
   const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -58,7 +58,9 @@ export default function SupervisorPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Supervisor</h1>
-        <p className="mt-1 text-sm text-gray-500">View TimeMint, OT, and Fixed Time Request for your assigned employees.</p>
+        <p className="mt-1 text-sm text-gray-500">
+          View TimeMint, OT, Fixed Time Request, Allowance Report, and Mileage for your assigned employees.
+        </p>
       </div>
 
       <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
@@ -122,6 +124,18 @@ export default function SupervisorPage() {
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
             Fixed Time Request
+          </button>
+          <button
+            onClick={() => handleOpenForm("/welfare/allowance-report")}
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            Allowance Report
+          </button>
+          <button
+            onClick={() => handleOpenForm("/welfare/mileage")}
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            Mileage &amp; Telephone
           </button>
           {error && <p className="text-sm text-red-600">{error}</p>}
           {!error && employees.length === 0 && (

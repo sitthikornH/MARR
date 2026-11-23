@@ -9,7 +9,7 @@ import type { ApiError, Employee, NewEmployee } from "@/lib/types";
  * GET: admins get every employee with their login account; a user gets only their own record;
  * a supervisor gets only the employees reachable through any of their report grants
  * (lib/auth.ts supervisorGroupFilter), with no account info (same as a user) — they only ever use
- * this list to pick who to view the three report forms for, or (Settings > Time Adjustment
+ * this list to pick who to view the report forms for, or (Settings > Time Adjustment
  * History) submit records for. A supervisor with full Employees access (Settings > Supervisors) is
  * treated like an admin.
  */

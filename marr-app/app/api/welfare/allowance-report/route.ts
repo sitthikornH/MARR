@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canAccessEmployee, forbidden, requireAuth } from "@/lib/auth";
+import { canAccessSupervisedEmployee, forbidden, requireAuth } from "@/lib/auth";
 import { query, type RowDataPacket } from "@/lib/db";
 import { classifyMonth, type DayRuleRow } from "@/lib/dayRules";
 import { timeAdjustmentStatusKind } from "@/lib/timeAdjustmentStatus";
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<AllowanceR
   const employeeId: number = employeeIdNum;
   const month: number = monthNum;
   const year: number = yearNum;
-  if (!canAccessEmployee(gate.auth, employeeId)) return forbidden();
+  if (!(await canAccessSupervisedEmployee(gate.auth, employeeId, "allowance"))) return forbidden();
 
   try {
     const employees = await query<RowDataPacket[]>(

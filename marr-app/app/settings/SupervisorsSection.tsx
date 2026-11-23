@@ -25,6 +25,8 @@ function permissionsOf(s: SupervisorAccount): SupervisorPermissionsUpdate {
     timemint: s.timemint,
     ot: s.ot,
     fixed_time: s.fixed_time,
+    allowance: s.allowance,
+    mileage: s.mileage,
   };
 }
 
@@ -35,6 +37,8 @@ const EMPTY_PERMISSIONS: SupervisorPermissionsUpdate = {
   timemint: NO_ACCESS,
   ot: NO_ACCESS,
   fixed_time: NO_ACCESS,
+  allowance: NO_ACCESS,
+  mileage: NO_ACCESS,
 };
 
 function AccessSelect({
@@ -68,8 +72,8 @@ function AccessSelect({
 
 /**
  * Settings > manage supervisor accounts (role='supervisor', no employee record). A supervisor can
- * view the TimeMint, OT & Work on holiday, and Fixed Time Request forms (only) for the employees
- * assigned to them on the Employees page's Supervisor column.
+ * view the TimeMint, OT & Work on holiday, Fixed Time Request, Allowance Report, and Mileage forms
+ * for whichever employee group(s) they're granted below.
  */
 export default function SupervisorsSection() {
   const [supervisors, setSupervisors] = useState<SupervisorAccount[]>([]);
@@ -202,10 +206,11 @@ export default function SupervisorsSection() {
       <div>
         <h2 className="text-base font-semibold text-gray-900">Supervisors</h2>
         <p className="mt-1 text-sm text-gray-500">
-          For each of TimeMint, OT &amp; Work on holiday, and Fixed Time Request, grant this account
-          a specific employee group, every group ("All groups"), or none. Several accounts may share
-          a group. The permissions below are independent toggles an admin picks per account — set
-          them to match any position (e.g. ADMIN-HR, ADMIN-ACC, ADMIN-Project).
+          For each of TimeMint, OT &amp; Work on holiday, Fixed Time Request, Allowance Report, and
+          Mileage, grant this account a specific employee group, every group ("All groups"), or
+          none. Several accounts may share a group. The permissions below are independent toggles
+          an admin picks per account — set them to match any position (e.g. ADMIN-HR, ADMIN-ACC,
+          ADMIN-Project).
         </p>
       </div>
 
@@ -274,6 +279,22 @@ export default function SupervisorsSection() {
             onChange={(fixed_time) => setNewPermissions({ ...newPermissions, fixed_time })}
           />
         </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-600">Allowance</span>
+          <AccessSelect
+            value={newPermissions.allowance}
+            groups={groups}
+            onChange={(allowance) => setNewPermissions({ ...newPermissions, allowance })}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-600">Mileage</span>
+          <AccessSelect
+            value={newPermissions.mileage}
+            groups={groups}
+            onChange={(mileage) => setNewPermissions({ ...newPermissions, mileage })}
+          />
+        </div>
         <button
           onClick={handleCreate}
           disabled={creating || !username.trim() || !password}
@@ -298,6 +319,8 @@ export default function SupervisorsSection() {
                 <th className="px-3 py-2 text-center">TimeMint</th>
                 <th className="px-3 py-2 text-center">SheetOver Time</th>
                 <th className="px-3 py-2 text-center">Sheet fixed time request</th>
+                <th className="px-3 py-2 text-center">Allowance</th>
+                <th className="px-3 py-2 text-center">Mileage</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
@@ -350,6 +373,22 @@ export default function SupervisorsSection() {
                       onChange={(fixed_time) => handlePermissionChange(s, { fixed_time })}
                     />
                   </td>
+                  <td className="px-3 py-2 text-center">
+                    <AccessSelect
+                      value={s.allowance}
+                      groups={groups}
+                      disabled={busyId === s.id}
+                      onChange={(allowance) => handlePermissionChange(s, { allowance })}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <AccessSelect
+                      value={s.mileage}
+                      groups={groups}
+                      disabled={busyId === s.id}
+                      onChange={(mileage) => handlePermissionChange(s, { mileage })}
+                    />
+                  </td>
                   <td className="px-3 py-2 text-gray-500">
                     {!s.has_password && <span className="text-amber-700">no password</span>}
                     {s.locked && <span className="text-red-600">locked</span>}
@@ -375,7 +414,7 @@ export default function SupervisorsSection() {
               ))}
               {supervisors.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-4 text-center text-gray-400">
+                  <td colSpan={10} className="px-3 py-4 text-center text-gray-400">
                     No supervisors yet.
                   </td>
                 </tr>
