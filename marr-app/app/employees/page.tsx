@@ -28,6 +28,10 @@ function ratesOf(employee: Employee): EmployeeRatesUpdate {
   };
 }
 
+// Hidden per the user's 2026-11-23 decision; the form and its handler are otherwise unchanged —
+// employees are added through the TimeMint sync, not by hand.
+const SHOW_ADD_EMPLOYEE = false;
+
 const EMPTY_FORM: NewEmployee = {
   emp_code: "",
   name: "",
@@ -240,89 +244,91 @@ export default function EmployeesPage() {
         <p className="mt-1 text-sm text-gray-500">Manage employee records and welfare rates.</p>
       </div>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-900 mb-4">Add Employee</h2>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Employee Code</label>
-            <input
-              type="text"
-              value={form.emp_code}
-              onChange={(e) => setForm({ ...form, emp_code: e.target.value })}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-              placeholder="EMP003"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-              placeholder="Full name"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Base Allowance</label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.base_allowance}
-              onChange={(e) => setForm({ ...form, base_allowance: Number(e.target.value) })}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Allowance Holiday</label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.base_allowance_holiday}
-              onChange={(e) => setForm({ ...form, base_allowance_holiday: Number(e.target.value) })}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Return Home</label>
-            <select
-              value={form.return_home_rate}
-              onChange={(e) => setForm({ ...form, return_home_rate: Number(e.target.value) })}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-            >
-              {RETURN_HOME_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Time In-Out</label>
-            <select
-              value={form.work_shift}
-              onChange={(e) => setForm({ ...form, work_shift: e.target.value })}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-            >
-              {WORK_SHIFT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="sm:col-span-2 lg:col-span-5 flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
-            >
-              {submitting ? "Adding..." : "Add Employee"}
-            </button>
-            {formError && <p className="text-sm text-red-600">{formError}</p>}
-          </div>
-        </form>
-      </section>
+      {SHOW_ADD_EMPLOYEE && (
+        <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-gray-900 mb-4">Add Employee</h2>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Employee Code</label>
+              <input
+                type="text"
+                value={form.emp_code}
+                onChange={(e) => setForm({ ...form, emp_code: e.target.value })}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                placeholder="EMP003"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Name</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                placeholder="Full name"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Base Allowance</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.base_allowance}
+                onChange={(e) => setForm({ ...form, base_allowance: Number(e.target.value) })}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Allowance Holiday</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.base_allowance_holiday}
+                onChange={(e) => setForm({ ...form, base_allowance_holiday: Number(e.target.value) })}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Return Home</label>
+              <select
+                value={form.return_home_rate}
+                onChange={(e) => setForm({ ...form, return_home_rate: Number(e.target.value) })}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+              >
+                {RETURN_HOME_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Time In-Out</label>
+              <select
+                value={form.work_shift}
+                onChange={(e) => setForm({ ...form, work_shift: e.target.value })}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+              >
+                {WORK_SHIFT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-5 flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
+              >
+                {submitting ? "Adding..." : "Add Employee"}
+              </button>
+              {formError && <p className="text-sm text-red-600">{formError}</p>}
+            </div>
+          </form>
+        </section>
+      )}
 
       {accountMessage && (
         <p className="rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800">{accountMessage}</p>
