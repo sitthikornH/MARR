@@ -82,14 +82,14 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
   }
 }
 
-/** PUT { role } (admin): makes the employee's account an admin or a normal user. */
+/** PUT { role } (admin only, even for a supervisor with can_manage_employees): makes the
+ *  employee's account an admin or a normal user. */
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse<EmployeeAccount | ApiError>> {
-  const gate = await requireAuth(request, { employees: true });
+  const gate = await requireAuth(request, { admin: true });
   if ("response" in gate) return gate.response;
 
   const employeeId = Number((await params).employeeId);
   if (!Number.isInteger(employeeId)) return NextResponse.json({ error: "Invalid employee id" }, { status: 400 });
-  if (!(await canManageEmployeeRecord(gate.auth, employeeId))) return forbidden();
   const id: number = employeeId;
   const body = (await request.json().catch(() => ({}))) as { role?: unknown };
   if (body.role !== "admin" && body.role !== "user") {

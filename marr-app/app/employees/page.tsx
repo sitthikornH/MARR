@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { isReturnHomeOption, RETURN_HOME_OPTIONS, returnHomeLabel } from "@/lib/returnHome";
 import { DEFAULT_WORK_SHIFT, isWorkShiftOption, workShiftLabel, WORK_SHIFT_OPTIONS } from "@/lib/workShift";
-import type { Employee, EmployeeAccount, EmployeeGroup, EmployeeRatesUpdate, NewEmployee, UserRole } from "@/lib/types";
+import type { AuthUser, Employee, EmployeeAccount, EmployeeGroup, EmployeeRatesUpdate, NewEmployee, UserRole } from "@/lib/types";
 
 // base_ot_rate is deliberately left out: OT pay isn't calculated yet, so its input is hidden here
 // (see ratesOf() below, which still sends the employee's current, now-zeroed value on every Update).
@@ -57,6 +57,7 @@ export default function EmployeesPage() {
   const [accountBusyId, setAccountBusyId] = useState<number | null>(null);
   const [accountMessage, setAccountMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
 
   async function loadEmployees() {
     setLoading(true);
@@ -78,6 +79,10 @@ export default function EmployeesPage() {
     fetch("/api/employee-groups")
       .then((res) => (res.ok ? res.json() : []))
       .then(setGroups)
+      .catch(() => {});
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? (res.json() as Promise<AuthUser>) : null))
+      .then((me) => setIsAdmin(me?.role === "admin"))
       .catch(() => {});
   }, []);
 
@@ -479,15 +484,19 @@ export default function EmployeesPage() {
                       {employee.account ? (
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-gray-800">{employee.account.username}</span>
-                          <select
-                            value={employee.account.role}
-                            disabled={accountBusyId === employee.id}
-                            onChange={(e) => handleRoleChange(employee, e.target.value as UserRole)}
-                            className="rounded border border-gray-300 px-1 py-0.5 text-xs"
-                          >
-                            <option value="user">user</option>
-                            <option value="admin">admin</option>
-                          </select>
+                          {isAdmin ? (
+                            <select
+                              value={employee.account.role}
+                              disabled={accountBusyId === employee.id}
+                              onChange={(e) => handleRoleChange(employee, e.target.value as UserRole)}
+                              className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+                            >
+                              <option value="user">user</option>
+                              <option value="admin">admin</option>
+                            </select>
+                          ) : (
+                            <span className="text-xs text-gray-500">{employee.account.role}</span>
+                          )}
                           {!employee.account.has_password && <span className="text-xs text-amber-700">no password</span>}
                           {employee.account.locked && <span className="text-xs text-red-600">locked</span>}
                         </div>
