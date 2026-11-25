@@ -520,13 +520,15 @@ export default function EmployeesPage() {
                       >
                         {updatingId === employee.id ? "Updating..." : "Update"}
                       </button>
-                      <button
-                        onClick={() => handleDelete(employee.id)}
-                        disabled={deletingId === employee.id}
-                        className="text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
-                      >
-                        {deletingId === employee.id ? "Deleting..." : "Delete"}
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDelete(employee.id)}
+                          disabled={deletingId === employee.id}
+                          className="text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
+                        >
+                          {deletingId === employee.id ? "Deleting..." : "Delete"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

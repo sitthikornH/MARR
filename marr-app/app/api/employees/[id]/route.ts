@@ -112,11 +112,13 @@ export async function PUT(
   }
 }
 
+/** Admin only, even for a supervisor with can_manage_employees — deleting an employee record is
+ *  not part of what that permission is meant to allow. */
 export async function DELETE(
   request: NextRequest,
   { params }: RouteParams
 ): Promise<NextResponse<{ success: true } | ApiError>> {
-  const gate = await requireAuth(request, { employees: true });
+  const gate = await requireAuth(request, { admin: true });
   if ("response" in gate) return gate.response;
   try {
     const { id } = await params;
@@ -125,7 +127,6 @@ export async function DELETE(
     if (!Number.isInteger(employeeId)) {
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 });
     }
-    if (!(await canManageEmployeeRecord(gate.auth, employeeId))) return forbidden();
 
     const result = await execute("DELETE FROM employees WHERE id = ?", [employeeId]);
 
