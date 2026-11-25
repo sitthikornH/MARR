@@ -11,14 +11,18 @@ import type { ApiError, Employee, NewEmployee } from "@/lib/types";
  * (lib/auth.ts supervisorGroupFilter), with no account info (same as a user) — they only ever use
  * this list to pick who to view the report forms for, or (Settings > Time Adjustment
  * History) submit records for. A supervisor with full Employees access (Settings > Supervisors) is
- * treated like an admin.
+ * treated like an admin — except when the caller passes `?scope=supervised`, used by the
+ * /supervisor report picker, which always stays scoped to the supervisor's own report grants even
+ * if they also have full Employees access (that permission is about the Employees admin page, not
+ * about who their report forms cover).
  */
 export async function GET(request: NextRequest): Promise<NextResponse<Employee[] | ApiError>> {
   const gate = await requireAuth(request);
   if ("response" in gate) return gate.response;
   const { auth } = gate;
   try {
-    const manageAll = canManageEmployees(auth);
+    const scopedToReports = auth.role === "supervisor" && request.nextUrl.searchParams.get("scope") === "supervised";
+    const manageAll = canManageEmployees(auth) && !scopedToReports;
     const hideAccount = !manageAll;
     let where = "";
     let params: unknown[] = [];
