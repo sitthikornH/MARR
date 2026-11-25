@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useBackBase } from "@/app/welfare/useBackBase";
-import { timeAdjustmentStatusKind } from "@/lib/timeAdjustmentStatus";
+import { timeAdjustmentStatusKind, timeAdjustmentStatusTimestamp } from "@/lib/timeAdjustmentStatus";
 import type { FixedTimeRequestReport } from "@/lib/types";
 
 /** "2026-11-03" -> "03/11/2569" (Buddhist year, as on the other forms) */
@@ -15,6 +15,12 @@ function thaiDate(date: string): string {
 
 /** "08:30:00" -> "08:30"; an empty time shows as "-". */
 const time = (t: string | null) => (t ? t.slice(0, 5) : "-");
+
+/** "2026-11-03 08:41:24" -> "03/11/2569 : 08:41" (Buddhist year, as on the other forms). */
+function thaiDateTime(value: string): string {
+  const [datePart, timePart] = value.split(" ");
+  return `${thaiDate(datePart)} : ${(timePart ?? "").slice(0, 5)}`;
+}
 
 /** Reports come in English or Thai. A status not listed here is shown exactly as TimeMint wrote it. */
 function statusView(status: string | null): { label: string; className: string } {
@@ -123,6 +129,7 @@ function ReportView() {
           <tbody>
             {report.rows.map((r) => {
               const status = statusView(r.status);
+              const statusAt = timeAdjustmentStatusTimestamp(r.status);
               return (
                 <tr key={r.record_no}>
                   <td className={`${cell} text-center whitespace-nowrap`}>{thaiDate(r.date)}</td>
@@ -132,7 +139,10 @@ function ReportView() {
                   <td className={`${cell} text-center font-semibold`}>{time(r.to_time_in)}</td>
                   <td className={`${cell} text-center font-semibold`}>{time(r.to_time_out)}</td>
                   <td className={cell}>{r.reason ?? ""}</td>
-                  <td className={`${cell} text-center font-semibold ${status.className}`}>{status.label}</td>
+                  <td className={`${cell} text-center font-semibold ${status.className}`}>
+                    {status.label}
+                    {statusAt && <div className="text-[9px] font-normal text-gray-600">{thaiDateTime(statusAt)}</div>}
+                  </td>
                   <td className={`${cell} text-center`}>{r.approver ?? ""}</td>
                   <td className={`${cell} text-center whitespace-nowrap`}>{r.record_no}</td>
                   <td className={`${cell} text-center`}>{r.added_by ?? ""}</td>

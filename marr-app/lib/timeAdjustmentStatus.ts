@@ -11,3 +11,10 @@ export function timeAdjustmentStatusKind(status: string | null): TimeAdjustmentS
   if (/approve|อนุมัติ/i.test(s)) return "approved";
   return "other";
 }
+
+/** Pulls "2026-11-03 08:41:24" out of a status like "อนุมัติแล้ว (2026-11-03 08:41:24)". Null when
+ *  there's no parenthesized timestamp (e.g. still pending). */
+export function timeAdjustmentStatusTimestamp(status: string | null): string | null {
+  const m = /\((\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)\)/.exec(status ?? "");
+  return m ? m[1] : null;
+}
