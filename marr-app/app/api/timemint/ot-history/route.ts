@@ -4,17 +4,19 @@ import pool, { query, type RowDataPacket } from "@/lib/db";
 import { parseOtHistory, toOtHistoryTables } from "@/lib/otHistory";
 import type { ApiError, FixHistoryEmployeeResult } from "@/lib/types";
 
-/** Upserts on overtime_id and never deletes, so the table keeps the submission time of OT requests. */
+/** Upserts on overtime_id and never deletes, so the table keeps the submission/approval time of OT
+ *  requests. */
 async function saveRecords(employeeId: number, records: ReturnType<typeof parseOtHistory>["records"]) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
     for (const r of records) {
       await connection.execute(
-        `INSERT INTO overtime_added_at (overtime_id, employee_id, requested_at)
-         VALUES (?, ?, ?)
-         ON DUPLICATE KEY UPDATE employee_id = VALUES(employee_id), requested_at = VALUES(requested_at)`,
-        [r.overtime_id, employeeId, r.requested_at]
+        `INSERT INTO overtime_added_at (overtime_id, employee_id, requested_at, approved_at)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE employee_id = VALUES(employee_id), requested_at = VALUES(requested_at),
+           approved_at = VALUES(approved_at)`,
+        [r.overtime_id, employeeId, r.requested_at, r.approved_at]
       );
     }
     await connection.commit();
@@ -28,8 +30,9 @@ async function saveRecords(employeeId: number, records: ReturnType<typeof parseO
 
 /**
  * POST { employee_id, tables } (admin, or a supervisor with the Time Adjustment History
- * permission): saves one employee's OT request submission times ("เพิ่มเมื่อ"), as read from
- * TimeMint's website in the admin's own browser (lib/fixHistoryBookmarklet.ts).
+ * permission): saves one employee's OT request submission times ("เพิ่มเมื่อ") and, once
+ * approved, the approval timestamp embedded in "สถานะ", as read from TimeMint's website in the
+ * admin's own browser (lib/fixHistoryBookmarklet.ts).
  */
 export async function POST(request: NextRequest): Promise<NextResponse<FixHistoryEmployeeResult | ApiError>> {
   const gate = await requireAuth(request, { timeAdjustmentHistory: true });

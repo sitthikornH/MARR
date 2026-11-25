@@ -1,6 +1,7 @@
 // Turns the tables read from TimeMint's "รายการทำงานล่วงเวลา" web page (viewot.php) into records.
-// Pure; columns are found by their Thai header name. Only "เพิ่มเมื่อ" (when the request was submitted)
-// is kept — the TimeMint API never returns it, but the website shows it next to the OT request.
+// Pure; columns are found by their Thai header name. Kept: "เพิ่มเมื่อ" (when the request was
+// submitted) and, when the "สถานะ" cell embeds one (e.g. "อนุมัติแล้ว (2026-11-25 08:38:17)"), the
+// date/time it was approved — the TimeMint API returns neither.
 
 export interface OtHistoryCell {
   text: string;
@@ -16,9 +17,12 @@ export interface OtHistoryTable {
 export interface OtHistoryRecord {
   overtime_id: string; // "#OT3173704", matches overtime_request.overtime_id
   requested_at: string; // "YYYY-MM-DD HH:MM:SS"
+  approved_at: string | null; // "YYYY-MM-DD HH:MM:SS", from the "สถานะ" cell; null when not approved (yet)
 }
 
-const REQUIRED_HEADERS = ["รายละเอียด", "รวม", "สถานะ"];
+// "รวม" isn't actually on the real page (confirmed 2026-11-25), so it must not be required — a table
+// missing it would otherwise never match and every record in it would silently go uncaptured.
+const REQUIRED_HEADERS = ["รายละเอียด", "เพิ่มเมื่อ"];
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -28,6 +32,13 @@ export function parseAddedAt(value: string): string | null {
   if (!m) return null;
   const [, y, mo, d, h, mi, s] = m;
   return `${y}-${pad(Number(mo))}-${pad(Number(d))} ${pad(Number(h))}:${mi}:${s ?? "00"}`;
+}
+
+/** Pulls "2026-11-25 08:38:17" out of a status cell like "อนุมัติแล้ว (2026-11-25 08:38:17)". Null
+ *  when the cell has no parenthesized timestamp (pending/rejected requests have none). */
+export function parseApprovedAt(status: string): string | null {
+  const m = /\((\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)\)/.exec(status);
+  return m ? parseAddedAt(m[1]) : null;
 }
 
 const MAX_TABLES = 50;
@@ -75,7 +86,8 @@ export function parseOtHistory(tables: OtHistoryTable[]): { recognized: boolean;
         skipped++;
         continue;
       }
-      byId.set(overtimeId, { overtime_id: overtimeId.slice(0, 50), requested_at: requestedAt });
+      const approvedAt = parseApprovedAt(cell("สถานะ")?.text ?? "");
+      byId.set(overtimeId, { overtime_id: overtimeId.slice(0, 50), requested_at: requestedAt, approved_at: approvedAt });
     }
   }
   return { recognized, records: [...byId.values()], skipped };

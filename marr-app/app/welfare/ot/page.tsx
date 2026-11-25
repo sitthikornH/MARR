@@ -147,7 +147,10 @@ function FormView() {
                   {r.status === "approved" ? r.hours : r.status === "pending" ? `(${r.hours})` : "-"}
                   {r.worked_minutes > 0 && <div className="text-[9px] text-gray-500">{duration(r.worked_minutes)}</div>}
                 </td>
-                <td className={`${cell} text-center font-semibold ${STATUS[r.status].className}`}>{STATUS[r.status].label}</td>
+                <td className={`${cell} text-center font-semibold ${STATUS[r.status].className}`}>
+                  {STATUS[r.status].label}
+                  {r.approved_at && <div className="text-[9px] font-normal text-gray-600">{thaiDateTime(r.approved_at)}</div>}
+                </td>
                 <td className={cell}></td>
                 <td className={cell}>{r.place ?? ""}</td>
                 <td className={cell}>{r.description ?? ""}</td>

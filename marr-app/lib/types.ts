@@ -391,6 +391,7 @@ export interface OtFormRow {
   date: string;
   overtime_id: string | null;
   requested_at: string | null; // "2026-11-04 14:38:39" — when the employee submitted the request (TimeMint website only)
+  approved_at: string | null; // "2026-11-25 08:38:17" — when it was approved (TimeMint website only)
   requested_start: string | null; // "17:00"
   requested_end: string | null;
   requested_minutes: number;

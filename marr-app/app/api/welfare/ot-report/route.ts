@@ -35,6 +35,7 @@ interface OvertimeRow extends RowDataPacket {
   reason: string | null;
   status: string;
   requested_at: string | null;
+  approved_at: string | null;
 }
 
 const hhmm = (t: string) => t.slice(0, 5);
@@ -97,7 +98,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<OtForm | A
     );
     const overtimes = await query<OvertimeRow[]>(
       `SELECT o.overtime_id, o.date, o.time_start, o.time_end, o.minutes, o.overtime_type, o.day_type, o.reason,
-              o.status, a.requested_at
+              o.status, a.requested_at, a.approved_at
        FROM overtime_request o
        LEFT JOIN overtime_added_at a ON a.overtime_id = o.overtime_id
        WHERE o.employee_id = ? AND YEAR(o.date) = ? AND MONTH(o.date) = ? ORDER BY o.date, o.time_start`,
@@ -124,6 +125,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<OtForm | A
         date: ot.date,
         overtime_id: ot.overtime_id,
         requested_at: ot.requested_at,
+        approved_at: ot.approved_at,
         requested_start: hhmm(ot.time_start),
         requested_end: hhmm(ot.time_end),
         requested_minutes: Number(ot.minutes) || window[1] - window[0],
@@ -150,6 +152,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<OtForm | A
         date,
         overtime_id: null,
         requested_at: null,
+        approved_at: null,
         requested_start: null,
         requested_end: null,
         requested_minutes: 0,
