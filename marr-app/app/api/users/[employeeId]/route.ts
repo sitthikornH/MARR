@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool, { execute, query, type RowDataPacket } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { canManageEmployeeRecord, forbidden, requireAuth } from "@/lib/auth";
 import { createEmployeeAccount } from "@/lib/employeeSync";
 import { hashPassword, phoneDigits } from "@/lib/password";
 import { fetchEmployeeProfile } from "@/lib/timemint";
@@ -32,6 +32,7 @@ export async function POST(request: NextRequest, { params }: RouteParams): Promi
 
   const employeeId = Number((await params).employeeId);
   if (!Number.isInteger(employeeId)) return NextResponse.json({ error: "Invalid employee id" }, { status: 400 });
+  if (!(await canManageEmployeeRecord(gate.auth, employeeId))) return forbidden();
   const id: number = employeeId;
   const body = (await request.json().catch(() => ({}))) as { temp_password?: unknown };
   const temp = typeof body.temp_password === "string" ? body.temp_password.trim() : "";
@@ -88,6 +89,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
 
   const employeeId = Number((await params).employeeId);
   if (!Number.isInteger(employeeId)) return NextResponse.json({ error: "Invalid employee id" }, { status: 400 });
+  if (!(await canManageEmployeeRecord(gate.auth, employeeId))) return forbidden();
   const id: number = employeeId;
   const body = (await request.json().catch(() => ({}))) as { role?: unknown };
   if (body.role !== "admin" && body.role !== "user") {

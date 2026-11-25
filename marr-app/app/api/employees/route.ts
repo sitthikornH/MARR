@@ -7,29 +7,26 @@ import type { ApiError, Employee, NewEmployee } from "@/lib/types";
 
 /**
  * GET: admins get every employee with their login account; a user gets only their own record;
- * a supervisor gets only the employees reachable through any of their report grants
- * (lib/auth.ts supervisorGroupFilter), with no account info (same as a user) — they only ever use
- * this list to pick who to view the report forms for, or (Settings > Time Adjustment
- * History) submit records for. A supervisor with full Employees access (Settings > Supervisors) is
- * treated like an admin — except when the caller passes `?scope=supervised`, used by the
- * /supervisor report picker, which always stays scoped to the supervisor's own report grants even
- * if they also have full Employees access (that permission is about the Employees admin page, not
- * about who their report forms cover).
+ * a supervisor — whether or not they have full Employees access (Settings > Supervisors,
+ * can_manage_employees) — always gets only the employees reachable through any of their five report
+ * grants (lib/auth.ts supervisorGroupFilter); can_manage_employees only adds their login account
+ * info to each row and lets them edit/delete within that same scope (see /api/employees/[id] and
+ * /api/users/[employeeId]). Without it, they only ever use this list to pick who to view the report
+ * forms for, or (Settings > Time Adjustment History) submit records for.
  */
 export async function GET(request: NextRequest): Promise<NextResponse<Employee[] | ApiError>> {
   const gate = await requireAuth(request);
   if ("response" in gate) return gate.response;
   const { auth } = gate;
   try {
-    const scopedToReports = auth.role === "supervisor" && request.nextUrl.searchParams.get("scope") === "supervised";
-    const manageAll = canManageEmployees(auth) && !scopedToReports;
+    const manageAll = canManageEmployees(auth);
     const hideAccount = !manageAll;
     let where = "";
     let params: unknown[] = [];
     if (auth.role === "user") {
       where = "WHERE e.id = ?";
       params = [auth.employee_id ?? -1];
-    } else if (auth.role === "supervisor" && !manageAll) {
+    } else if (auth.role === "supervisor") {
       const { allowAll, groupIds } = supervisorGroupFilter(auth);
       if (!allowAll) {
         where = groupIds.length > 0 ? `WHERE e.group_id IN (${groupIds.map(() => "?").join(", ")})` : "WHERE 1 = 0";

@@ -28,7 +28,7 @@ export default function SupervisorPage() {
     const selectedId = initial.get("employee_id") ?? "";
     if (selectedId) setEmployeeId(selectedId);
 
-    fetch("/api/employees?scope=supervised")
+    fetch("/api/employees")
       .then((res) => (res.ok ? res.json() : []))
       .then((list: Employee[]) => {
         setEmployees(list);

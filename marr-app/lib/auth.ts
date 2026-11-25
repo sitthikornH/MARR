@@ -154,6 +154,15 @@ async function isInGroup(employeeId: number, groupId: number): Promise<boolean> 
   return rows.length > 0;
 }
 
+async function isInAnyGroup(employeeId: number, groupIds: number[]): Promise<boolean> {
+  if (groupIds.length === 0) return false;
+  const rows = await query<RowDataPacket[]>(
+    `SELECT 1 FROM employees WHERE id = ? AND group_id IN (${groupIds.map(() => "?").join(", ")})`,
+    [employeeId, ...groupIds]
+  );
+  return rows.length > 0;
+}
+
 export type SupervisedReport = "timemint" | "ot" | "fixed_time" | "allowance" | "mileage";
 
 function reportAccess(auth: AuthUser, report: SupervisedReport): { groupId: number | null; all: boolean } {
@@ -201,10 +210,10 @@ export async function canManageEmployeeHistory(auth: AuthUser, employeeId: numbe
 }
 
 /**
- * Which employees a plain supervisor (without full Employees access) may see at all — used to
- * scope GET /api/employees, e.g. for the /supervisor picker and Settings > Time Adjustment
- * History's employee list. `allowAll: true` means no filter is needed (every employee is visible
- * through at least one of their five report grants).
+ * Which employees a supervisor may see at all, based on their five report grants — used to scope
+ * GET /api/employees (the /supervisor picker, the Employees page for a supervisor with full
+ * Employees access, and Settings > Time Adjustment History's employee list). `allowAll: true`
+ * means no filter is needed (every employee is visible through at least one report grant).
  */
 export function supervisorGroupFilter(auth: AuthUser): { allowAll: boolean; groupIds: number[] } {
   const accesses = [
@@ -217,6 +226,20 @@ export function supervisorGroupFilter(auth: AuthUser): { allowAll: boolean; grou
   if (accesses.some((a) => a.all)) return { allowAll: true, groupIds: [] };
   const groupIds = [...new Set(accesses.map((a) => a.groupId).filter((g): g is number => g !== null))];
   return { allowAll: false, groupIds };
+}
+
+/**
+ * Whether a supervisor with full Employees access (can_manage_employees) may manage this specific
+ * employee record (GET/PUT/DELETE /api/employees/[id], /api/users/[employeeId]): every employee if
+ * any of their five report grants is "all", else only employees in their report-group grants — the
+ * same scope used to build their Employees list (supervisorGroupFilter). Admins always pass; call
+ * this only after confirming the caller has full Employees access (canManageEmployees).
+ */
+export async function canManageEmployeeRecord(auth: AuthUser, employeeId: number): Promise<boolean> {
+  if (auth.role === "admin") return true;
+  const { allowAll, groupIds } = supervisorGroupFilter(auth);
+  if (allowAll) return true;
+  return isInAnyGroup(employeeId, groupIds);
 }
 
 export const forbidden = () => NextResponse.json({ error: "You can only view your own records" }, { status: 403 });
